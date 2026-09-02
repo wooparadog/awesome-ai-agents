@@ -46,6 +46,31 @@ function util.list_dir(path)
   return out
 end
 
+-- Names only, skipping the per-entry stat that list_dir pays for. Worth it when
+-- enumerating something as large as /proc, where the attributes go unused.
+function util.list_names(path)
+  local out = {}
+  local ok, enum = pcall(function()
+    return Gio.File.new_for_path(path):enumerate_children("standard::name", Gio.FileQueryInfoFlags.NONE, nil)
+  end)
+  if not ok or not enum then
+    return out
+  end
+  while true do
+    local got, info = pcall(function()
+      return enum:next_file(nil)
+    end)
+    if not got or not info then
+      break
+    end
+    out[#out + 1] = info:get_name()
+  end
+  pcall(function()
+    enum:close(nil)
+  end)
+  return out
+end
+
 function util.mkdir_p(path)
   pcall(function()
     Gio.File.new_for_path(path):make_directory_with_parents()
@@ -69,34 +94,24 @@ function util.proc_comm(pid)
   return comm and comm:gsub("%s+$", "") or nil
 end
 
-function util.proc_ppid(pid)
-  local stat = util.read_file("/proc/" .. tostring(pid) .. "/stat")
-  if not stat then
-    return nil
-  end
-  -- Field 4 is the parent pid, but field 2 (comm) may contain spaces and
-  -- parentheses, so resume parsing after the final ')'.
-  local rest = stat:match("%)%s*(.*)$")
-  if not rest then
-    return nil
-  end
-  local _state, ppid = rest:match("^(%S+)%s+(%d+)")
-  return tonumber(ppid)
+-- Argv as a plain space-separated string (the kernel NUL-separates it).
+function util.proc_cmdline(pid)
+  local raw = util.read_file("/proc/" .. tostring(pid) .. "/cmdline")
+  return raw and raw:gsub("%z", " ") or nil
 end
 
--- The pid chain from `pid` up towards init, `pid` first. Bounded so a cycle or
--- a stale /proc read can never spin.
-function util.proc_ancestors(pid, limit)
-  local out = {}
-  local current = tonumber(pid)
-  for _ = 1, limit or 12 do
-    if not current or current <= 1 then
-      break
-    end
-    out[#out + 1] = current
-    current = util.proc_ppid(current)
+function util.proc_cwd(pid)
+  local ok, target = pcall(function()
+    return Gio.File.new_for_path("/proc/" .. tostring(pid) .. "/cwd"):query_info(
+      "standard::symlink-target",
+      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+      nil
+    )
+  end)
+  if not ok or not target then
+    return nil
   end
-  return out
+  return target:get_symlink_target()
 end
 
 return util

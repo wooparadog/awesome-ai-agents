@@ -9,32 +9,35 @@ are running, how many are blocked waiting on you, and what today's tokens cost.
 󰚩 3 ✓2       two finished a turn, awaiting input  (green)
 ```
 
-Hovering opens a per-agent breakdown; left-clicking focuses the terminal of
-whichever session wants you; right-clicking forces a rescan. With no agents
-running the widget reports zero, so the surrounding wibar segment can hide
-itself entirely.
+Hovering opens a per-agent breakdown; right-clicking forces a rescan.
 
 ```
 AI agents
 claude code  3 sessions
  ? toki-web/master    needs you   claude-opus-5   25.9M
  ✓ dash               done        claude-opus-5    7.6M
- ✓ notes              done        claude-opus-5     77k
+ · notes              idle        claude-opus-5     77k
    today  69.6M tokens · $58.75
 
 codex  1 session
  ● orion              working     gpt-5.6-sol      3.7M
-   today  3.7M tokens · cost n/a · weekly limit 30%
+   today  3.7M tokens · cost n/a · weekly limit 94%
 
 total today  $58.75
 ```
 
-## Why it costs nothing to run
+## Why it costs almost nothing to run
 
-**Nothing polls.** Both CLIs support hooks, so each one reports when it starts, submits a
-prompt, blocks on a permission prompt, finishes a turn, or exits. An idle desktop
-with idle agents costs exactly zero CPU — there is no timer anywhere in the
-module.
+**Running agents report themselves.** Both CLIs support hooks, so each one says
+when it starts, submits a prompt, blocks on a permission prompt, finishes a turn,
+or exits. Between those events, tracking a busy agent costs nothing at all.
+
+**Except for one thing no hook reports: an agent that hasn't run a turn yet.**
+Codex creates its session — and its rollout file — only when the first prompt is
+submitted, so a freshly opened TUI is invisible to hooks *and* to the filesystem.
+That gap is covered by a `/proc` walk every `scan_interval` seconds (default 15,
+~3ms a pass, `0` disables it and falls back to scanning on hook events and when
+the popup opens).
 
 **Costs are computed incrementally.** Transcripts are append-only JSONL, so each
 file carries a byte offset and a refresh only parses the bytes appended since
@@ -94,13 +97,15 @@ local ai = ai_agents({
 | `codex_sessions` | `~/.codex/sessions` | Codex rollout root |
 | `cache_path` | `$XDG_CACHE_HOME/awesome/ai-agents.json` | offset/usage cache |
 | `event_dir` | `$XDG_RUNTIME_DIR/ai-agents` | must match `hook.sh` (`AI_AGENTS_EVENT_DIR`) |
+| `scan_interval` | `15` | seconds between `/proc` discovery passes; `0` disables |
 
 `state` carries `total`, `busy`, `asking`, `done`, `order` (agent names),
 `agents` (grouped session lists) and `cost` (today's per-agent totals). Each
 session has `agent`, `state`, `cwd`, `model`, `pid` and `transcript`.
 
-The returned handle exposes `widget`, `state`, `update()`, `show_popup()`,
-`hide_popup()` and `jump()`.
+The returned handle exposes `widget`, `state`, `update()`, `show_popup()` and
+`hide_popup()`. `sessions.log()` returns the last 64 events applied, which is the
+first thing to look at when a state looks wrong.
 
 ## How it works
 
@@ -117,11 +122,32 @@ The returned handle exposes `widget`, `state`, `update()`, `show_popup()`,
 *filename*, so the payload passes through byte-for-byte. Writes go to
 `$XDG_RUNTIME_DIR` (tmpfs): no disk wear, and no stale state survives a reboot.
 
-Session states: `busy` (working) → `asking` (blocked on a permission prompt or
-question) → `done` (turn finished, awaiting your next prompt). Hooks alone can't
-be trusted for liveness — a `kill -9`'d agent never fires `SessionEnd` — so every
-read of the session list first reaps sessions whose pid has left `/proc`, with a
-`comm` check to survive pid reuse.
+Session states: `idle` (open, nothing said yet) → `busy` (working) → `asking`
+(blocked on a permission prompt or question) → `done` (turn finished, awaiting
+your next prompt).
+
+Several things make that tracking hold up in practice:
+
+- **Liveness.** A `kill -9`'d agent never fires `SessionEnd`, so every read of the
+  session list first reaps sessions whose pid has left `/proc`, with a `comm`
+  check to survive pid reuse.
+- **Compaction.** Claude Code fires `SessionStart` with `source: "compact"` in the
+  *middle* of a turn. Treating that like a new session would report a busy agent
+  as idle for the rest of the turn, so it's ignored.
+- **Unrecognised notifications.** `Notification` covers both "needs your
+  permission" and "waiting for your input". Anything else it might say leaves the
+  state untouched — guessing would clear a working agent's badge.
+- **One session per process.** A new session on a pid retires whatever was there
+  before, so `/clear` and `/resume` don't leave superseded sessions behind
+  inflating the count. This also means a session adopted from `/proc` is replaced
+  cleanly once it fires its first hook.
+- **Clearing `asking`.** Nothing reports that *you answered*. While a session is
+  blocked, its transcript is watched: the agent writes again the moment it is
+  unblocked, which clears the badge instead of leaving it stuck until the turn
+  ends.
+- **Helper processes.** The Claude daemon, its pty hosts, Codex's MCP/app servers
+  and the `node` wrapper all carry an agent's name but are not sessions, and are
+  filtered out of discovery.
 
 `PreToolUse` / `PostToolUse` are deliberately not registered: they fire hundreds
 of times per turn and add no signal.
@@ -143,11 +169,12 @@ transcripts — 69,233,739 tokens / $58.4294 across a day, matching exactly.
 
 ## Known limits
 
-- A session already running when the hooks were installed stays invisible until
-  its next turn fires a hook.
-- Click-to-focus follows the process tree to a window. Agents inside **tmux** are
-  handled specially (pane lookup, then the attached client's window), but an
-  agent over ssh or in a detached tmux session has no local window to focus.
+- A session running on another machine (ssh, a container) is invisible: both
+  discovery paths are local.
+- A discovered session has no session id to match a transcript against, so its
+  usage is read from the most recent transcript for its working directory. With
+  two agents in one directory that can attribute usage to the wrong row until the
+  session fires its first hook.
 - Prices are hand-maintained. An unknown model is not an error: its tokens are
   still counted, it is left out of the dollar figure, and the total is marked
   `+`. Codex's `gpt-5.6-sol` is currently unpriced.

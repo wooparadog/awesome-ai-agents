@@ -2,15 +2,19 @@
 
 -- Live Claude Code / Codex session tracking, driven entirely by agent hooks.
 --
--- lib/ai/hook.sh drops each hook payload into $XDG_RUNTIME_DIR/ai-agents as a
--- file named "<agent>.<Event>.<pid>.<nanos>.json". A Gio directory monitor wakes
--- this module when one lands, so there is no polling timer anywhere: an idle
--- desktop with idle agents costs exactly zero CPU.
+-- hook.sh drops each hook payload into $XDG_RUNTIME_DIR/ai-agents as a file named
+-- "<agent>.<Event>.<pid>.<nanos>.json". A Gio directory monitor wakes this module
+-- when one lands, so reacting to a running agent costs nothing between events.
 --
--- Hooks alone cannot be trusted for liveness — a kill -9'd agent never fires
--- SessionEnd — so every read of the session list first reaps entries whose pid
--- has left /proc. The pid recorded by the hook is the CLI process itself, which
--- also gives the widget something to walk up from when focusing a terminal.
+-- Hooks alone are not enough, in two directions:
+--
+--   * Liveness — a kill -9'd agent never fires SessionEnd, so every read of the
+--     session list first reaps entries whose pid has left /proc.
+--   * Discovery — an agent that has not run a turn yet has fired no hook at all.
+--     Codex in particular creates its session (and its rollout file) only when
+--     the first prompt is submitted, so a freshly opened TUI is invisible to
+--     hooks *and* to the filesystem. `sessions.scan` walks /proc for agent
+--     processes and adopts any it doesn't already know about.
 
 local lgi = require("lgi")
 local Gio = lgi.Gio
@@ -30,9 +34,23 @@ local EVENT_DIR = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/ai-agents"
 -- it, so sweep it away once it is clearly stale.
 local TMP_GRACE = 60
 
+-- How often to walk /proc for agents that have not fired a hook yet. There is no
+-- event for "a TUI opened and is sitting at its prompt", so this is the one
+-- polled thing in the module; ~3ms per pass, and 0 disables it (discovery then
+-- happens on hook events and when the popup opens).
+local scan_interval = 15
+-- Rebuild the pid classification cache this often, bounding how long a reused
+-- pid could stay mislabelled.
+local CACHE_TTL = 300
+
 local live = {}
 local subscribers = {}
-local monitor, debounce
+local monitor, debounce, scan_timer
+local watches = {}
+local recent = {}
+
+-- Processes that carry an agent's name but are not a session.
+local NOT_A_SESSION = { "daemon run", "bg-pty-host", "bg-spare", "mcp-server", "app-server" }
 
 -- ── State machine ────────────────────────────────────────────────────────────
 --
@@ -48,10 +66,79 @@ local function emit()
 end
 
 local function transcript_of(s)
-  if not s.transcript and s.agent == "codex" then
+  if not s.transcript and s.agent == "codex" and not s.discovered then
     s.transcript = cost.find_codex_transcript(s.id)
   end
+  -- A session adopted from /proc has no id to match on, so fall back to the most
+  -- recent transcript for its working directory. An agent that has not written
+  -- one yet would make that a directory listing per refresh, so back off between
+  -- attempts.
+  if not s.transcript and s.cwd and os.time() - (s.transcript_checked or 0) > 30 then
+    s.transcript_checked = os.time()
+    s.transcript = cost.find_transcript(s.agent, s.cwd)
+  end
   return s.transcript
+end
+
+-- While a session is blocked on you, nothing else will report that you answered.
+-- Watching its transcript covers that: the agent writes again the moment it is
+-- unblocked (tool result, or the next assistant message), so the "?" badge
+-- clears itself instead of sticking until the turn ends.
+local function unwatch(key)
+  if watches[key] then
+    pcall(function()
+      watches[key]:cancel()
+    end)
+    watches[key] = nil
+  end
+end
+
+local function watch_transcript(key)
+  unwatch(key)
+  local s = live[key]
+  local path = s and transcript_of(s)
+  if not path then
+    return
+  end
+  local ok, m = pcall(function()
+    return Gio.File.new_for_path(path):monitor_file(Gio.FileMonitorFlags.NONE, nil)
+  end)
+  if not ok or not m then
+    return
+  end
+  watches[key] = m
+  m.on_changed = function()
+    local current = live[key]
+    if current and current.state == "asking" then
+      current.state = "busy"
+      current.updated = os.time()
+      unwatch(key)
+      emit()
+    end
+  end
+end
+
+-- One CLI process runs one session at a time, so a new session on a pid retires
+-- whatever was there before (`/clear` and `/resume` both land here). Without
+-- this, superseded sessions linger for as long as the process lives and the
+-- count creeps upward.
+local function retire_others(pid, keep)
+  if not pid or pid == 0 then
+    return
+  end
+  for key, s in pairs(live) do
+    if key ~= keep and s.pid == pid then
+      unwatch(key)
+      live[key] = nil
+    end
+  end
+end
+
+local function log(agent, event, pid, id)
+  recent[#recent + 1] = { at = os.time(), agent = agent, event = event, pid = pid, id = id }
+  if #recent > 64 then
+    table.remove(recent, 1)
+  end
 end
 
 local function apply(agent, event, pid, payload)
@@ -62,12 +149,16 @@ local function apply(agent, event, pid, payload)
 
   local key = agent .. "/" .. id
   local s = live[key]
-  if not s then
+  local fresh = not s
+  if fresh then
     s = { agent = agent, id = id, state = "idle", started = os.time() }
     live[key] = s
   end
   if pid and pid > 0 then
     s.pid = pid
+  end
+  if fresh then
+    retire_others(s.pid, key)
   end
   s.cwd = payload.cwd or s.cwd
   s.transcript = payload.transcript_path or s.transcript
@@ -76,28 +167,44 @@ local function apply(agent, event, pid, payload)
 
   -- Claude Code spells events "SessionStart", Codex spells them "session-start".
   local e = event:lower():gsub("[-_]", "")
+  log(agent, e, s.pid, id)
 
   if e == "sessionend" then
+    unwatch(key)
     live[key] = nil
     cost.refresh(transcript_of(s), agent)
   elseif e == "sessionstart" then
-    s.state = "idle"
+    -- source is one of startup / resume / clear / compact. Compaction happens
+    -- *inside* a running turn, so treating it like a fresh session would report
+    -- a busy agent as idle for the rest of the turn.
+    if payload.source ~= "compact" then
+      s.state = "idle"
+      s.started = os.time()
+    end
+    unwatch(key)
   elseif e == "userpromptsubmit" or e == "pretooluse" or e == "posttooluse" then
     s.state = "busy"
+    unwatch(key)
   elseif e == "permissionrequest" then
     s.state = "asking"
+    watch_transcript(key)
   elseif e == "notification" then
-    -- Claude Code's Notification covers two different situations: a pending
-    -- permission prompt, and "still waiting on you" after an idle minute. Only
-    -- the first is a decision the agent is blocked on.
+    -- Claude Code's Notification covers two situations with one event: a pending
+    -- permission prompt, and "waiting for your input" after an idle minute.
+    -- Anything else it might notify about leaves the state alone — guessing
+    -- "done" for an unrecognised message would clear a busy agent's badge.
     local message = tostring(payload.message or ""):lower()
     if message:find("permission") or message:find("approve") or message:find("confirm") then
       s.state = "asking"
-    elseif s.state ~= "asking" then
-      s.state = "done"
+      watch_transcript(key)
+    elseif message:find("waiting") or message:find("input") or message:find("idle") then
+      if s.state ~= "asking" then
+        s.state = "done"
+      end
     end
   elseif e == "stop" then
     s.state = "done"
+    unwatch(key)
     -- The turn's transcript bytes are on disk now: fold them into today's
     -- totals while they are a few KB, so hovering the widget stays instant.
     cost.refresh(transcript_of(s), agent)
@@ -133,7 +240,7 @@ local function drain()
     return a.nanos < b.nanos
   end)
 
-  local changed = false
+  local changed = sessions.scan()
   for _, ev in ipairs(events) do
     local raw = util.read_file(ev.path)
     os.remove(ev.path)
@@ -163,10 +270,92 @@ local function alive(s)
   return comm:match("^claude") ~= nil or comm:match("^codex") ~= nil
 end
 
+-- ── Process discovery ────────────────────────────────────────────────────────
+
+local proc_cache, proc_cache_at = {}, 0
+
+local function classify(pid)
+  local comm = util.proc_comm(pid)
+  if not comm then
+    return false
+  end
+  local agent
+  if comm:match("^claude") then
+    agent = "claude"
+  elseif comm == "codex" then
+    agent = "codex"
+  else
+    return false
+  end
+  -- Helper processes share the agent's name: the Claude daemon and its pty
+  -- hosts, Codex's MCP/app servers. None of them is a session.
+  local args = util.proc_cmdline(pid) or ""
+  for _, marker in ipairs(NOT_A_SESSION) do
+    if args:find(marker, 1, true) then
+      return false
+    end
+  end
+  return agent
+end
+
+-- Adopt agent processes that no hook has told us about. Classification is cached
+-- per pid (the expensive part is reading comm/cmdline), so a repeat pass only
+-- looks at pids it has never seen.
+function sessions.scan()
+  if os.time() - proc_cache_at > CACHE_TTL then
+    proc_cache, proc_cache_at = {}, os.time()
+  end
+
+  local known = {}
+  for _, s in pairs(live) do
+    if s.pid and s.pid > 0 then
+      known[s.pid] = true
+    end
+  end
+
+  local changed, seen = false, {}
+  for _, name in ipairs(util.list_names("/proc")) do
+    local pid = tonumber(name)
+    if pid then
+      seen[pid] = true
+      local agent = proc_cache[pid]
+      if agent == nil then
+        agent = classify(pid)
+        proc_cache[pid] = agent
+      end
+      if agent and not known[pid] then
+        -- No session id until this agent runs a turn; key on the pid instead,
+        -- and let the real SessionStart retire this placeholder.
+        live[agent .. "/pid:" .. pid] = {
+          agent = agent,
+          id = "pid:" .. pid,
+          pid = pid,
+          cwd = util.proc_cwd(pid),
+          state = "idle",
+          started = os.time(),
+          updated = os.time(),
+          discovered = true,
+        }
+        known[pid] = true
+        changed = true
+      end
+    end
+  end
+
+  for pid in pairs(proc_cache) do
+    if not seen[pid] then
+      proc_cache[pid] = nil
+    end
+  end
+
+  return changed
+end
+
 function sessions.reap()
   local changed = false
   for key, s in pairs(live) do
     if not alive(s) then
+      unwatch(key)
       live[key] = nil
       changed = true
     end
@@ -177,7 +366,25 @@ end
 -- ── Public API ───────────────────────────────────────────────────────────────
 
 function sessions.configure(opts)
-  EVENT_DIR = (opts or {}).event_dir or EVENT_DIR
+  opts = opts or {}
+  EVENT_DIR = opts.event_dir or EVENT_DIR
+  if opts.scan_interval ~= nil then
+    scan_interval = opts.scan_interval
+  end
+end
+
+-- Consume any pending hook payloads and walk /proc, without waiting for the
+-- directory monitor. Used by the widget's rescan binding, and by tests that run
+-- outside a GLib main loop.
+function sessions.refresh()
+  local drained = drain()
+  return drained
+end
+
+-- Most recent events applied, oldest first — for debugging what an agent
+-- actually reported.
+function sessions.log()
+  return recent
 end
 
 function sessions.subscribe(cb)
@@ -198,6 +405,7 @@ function sessions.snapshot()
   }
 
   for _, s in pairs(live) do
+    transcript_of(s)
     snap.total = snap.total + 1
     if s.state == "asking" then
       snap.asking = snap.asking + 1
@@ -230,30 +438,9 @@ function sessions.snapshot()
   return snap
 end
 
--- Sessions blocked on the user, most recently blocked first — what a click on
--- the widget cycles through.
-function sessions.waiting()
-  local out = {}
-  for _, s in pairs(live) do
-    if s.state == "asking" then
-      out[#out + 1] = s
-    end
-  end
-  if #out == 0 then
-    for _, s in pairs(live) do
-      if s.state == "done" then
-        out[#out + 1] = s
-      end
-    end
-  end
-  table.sort(out, function(a, b)
-    return (a.updated or 0) > (b.updated or 0)
-  end)
-  return out
-end
-
 function sessions.start()
   util.mkdir_p(EVENT_DIR)
+  sessions.scan()
   drain()
 
   -- Coalesce the burst a single turn produces (Stop plus its neighbours land
@@ -267,6 +454,18 @@ function sessions.start()
       end
     end,
   })
+
+  if scan_interval and scan_interval > 0 then
+    scan_timer = gears.timer({
+      timeout = scan_interval,
+      callback = function()
+        if sessions.scan() or sessions.reap() then
+          emit()
+        end
+      end,
+    })
+    scan_timer:start()
+  end
 
   local ok, m = pcall(function()
     return Gio.File.new_for_path(EVENT_DIR):monitor_directory(Gio.FileMonitorFlags.NONE, nil)

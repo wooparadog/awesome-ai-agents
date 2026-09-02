@@ -208,7 +208,11 @@ local function digest_codex_line(entry, line, today, today_iso)
     cached = tonumber(info:match('"cached_input_tokens":(%d+)')) or 0,
     output = tonumber(info:match('"output_tokens":(%d+)')) or 0,
   }
-  entry.rate_limit = tonumber(line:match('"used_percent":([%d%.]+)')) or entry.rate_limit
+  local used = tonumber(line:match('"used_percent":([%d%.]+)'))
+  local stamp = line:match('"timestamp":"([^"]+)"')
+  if used then
+    entry.rate_limit, entry.rate_limit_ts = used, stamp
+  end
 
   local ts = line:match('"timestamp":"([^"]+)"')
   if not ts or ts < today_iso then
@@ -381,6 +385,7 @@ function cost.save()
       session_id = e.session_id,
       cumulative = e.cumulative,
       rate_limit = e.rate_limit,
+      rate_limit_ts = e.rate_limit_ts,
       seen_at = e.seen_at,
     }
   end
@@ -472,6 +477,37 @@ function cost.find_codex_transcript(session_id)
   return nil
 end
 
+-- Best-effort transcript for a session discovered from /proc, which has no
+-- session id to match on — only its working directory.
+function cost.find_transcript(agent, cwd)
+  if not agent or not cwd then
+    return nil
+  end
+
+  if agent == "claude" then
+    -- Claude names a project directory after the cwd with "/" and "." replaced
+    -- by "-", e.g. /home/me/.config/awesome -> -home-me--config-awesome.
+    local slug = cwd:gsub("[/.]", "-")
+    local newest, newest_at = nil, -1
+    for _, f in ipairs(util.list_dir(CLAUDE_PROJECTS .. "/" .. slug)) do
+      if not f.is_dir and f.name:match("%.jsonl$") and f.mtime > newest_at then
+        newest, newest_at = f.path, f.mtime
+      end
+    end
+    return newest
+  end
+
+  -- Codex rollouts don't encode the cwd in their name, but digesting one records
+  -- it, so match against what we've already parsed.
+  local newest, newest_at = nil, -1
+  for path, e in pairs(state.files) do
+    if e.agent == "codex" and e.cwd == cwd and (e.seen_at or 0) > newest_at then
+      newest, newest_at = path, e.seen_at or 0
+    end
+  end
+  return newest
+end
+
 -- Today's usage for a single transcript.
 function cost.for_transcript(path)
   local e = path and state.files[path]
@@ -523,10 +559,11 @@ function cost.totals()
         agg.tokens = agg.tokens + total_tokens(cx)
         agg.dollars = agg.dollars + dollars
         agg.priced = agg.priced and known
-        -- Codex reports how much of the plan's weekly window is spent; the
-        -- freshest number wins.
-        if e.rate_limit and (e.seen_at or 0) >= (out.codex.rate_limit_at or 0) then
-          out.codex.rate_limit, out.codex.rate_limit_at = e.rate_limit, e.seen_at or 0
+        -- Codex reports how much of the plan's weekly window is spent. Order by
+        -- when the sample was *taken*, not when we happened to parse the file —
+        -- concurrent sessions are digested in arbitrary order.
+        if e.rate_limit and (e.rate_limit_ts or "") > (out.codex.rate_limit_ts or "") then
+          out.codex.rate_limit, out.codex.rate_limit_ts = e.rate_limit, e.rate_limit_ts
         end
       end
     end

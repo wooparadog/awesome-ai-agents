@@ -6,8 +6,8 @@
 --
 -- The widget reports how many agent sessions are alive, how many are blocked on
 -- a decision, and how many finished a turn and are waiting for the next prompt.
--- Hovering shows today's per-agent token and dollar totals; a left click focuses
--- the terminal of whichever session wants you.
+-- Hovering shows today's per-agent token and dollar totals; right-clicking
+-- forces a rescan.
 --
 -- Arguments (all optional):
 --   settings(state, widget)  render callback; `state` carries total/busy/asking/
@@ -19,9 +19,16 @@
 --   codex_sessions           default ~/.codex/sessions
 --   cache_path               default $XDG_CACHE_HOME/awesome/ai-agents.json
 --   event_dir                default $XDG_RUNTIME_DIR/ai-agents (match hook.sh)
+--   scan_interval            seconds between /proc discovery passes (default 15,
+--                            0 disables; discovery then runs on hook events and
+--                            when the popup opens)
 --
--- Everything is event-driven (see lib/ai/sessions.lua): no timer runs while the
--- agents are idle.
+-- Session tracking is hook-driven (see sessions.lua). The one exception is
+-- discovering an agent that has not run a turn yet, which no hook reports; that
+-- costs a periodic /proc walk, tunable with `scan_interval`.
+--
+-- The returned handle exposes `widget`, `state`, `update()`, `show_popup()` and
+-- `hide_popup()`.
 
 local wibox = require("wibox")
 local awful = require("awful")
@@ -31,12 +38,8 @@ local gears = require("gears")
 -- Sibling modules are resolved relative to wherever this library was installed,
 -- so it works at lib/ai, at the top level, or anywhere else on package.path.
 local base = (...):gsub("%.init$", "") .. "."
-local util = require(base .. "util")
 local cost = require(base .. "cost")
 local sessions = require(base .. "sessions")
-
----@diagnostic disable-next-line
-local client = client
 
 local AGENT_LABEL = { claude = "claude code", codex = "codex" }
 local STATE_LABEL = { asking = "needs you", busy = "working", done = "done", idle = "idle" }
@@ -80,7 +83,9 @@ local function project_label(cwd)
   if not last then
     return "/"
   end
-  if GENERIC_DIR[last] and parts[#parts - 1] then
+  -- A bare "master" or ".repo" says nothing about which project it belongs to,
+  -- so keep the parent for those.
+  if (GENERIC_DIR[last] or last:sub(1, 1) == ".") and parts[#parts - 1] then
     return parts[#parts - 1] .. "/" .. last
   end
   return last
@@ -175,78 +180,6 @@ local function popup_text(colors)
   return table.concat(lines, "\n")
 end
 
--- ── Click to focus ───────────────────────────────────────────────────────────
-
--- The hook records the CLI's pid; the window we want belongs to whichever
--- ancestor of it X knows about — the terminal emulator.
-local function client_for_pid(pid)
-  if not pid or pid == 0 then
-    return nil
-  end
-  local by_pid = {}
-  for _, c in ipairs(client.get()) do
-    if c.pid then
-      by_pid[c.pid] = c
-    end
-  end
-  for _, ancestor in ipairs(util.proc_ancestors(pid, 12)) do
-    if by_pid[ancestor] then
-      return by_pid[ancestor]
-    end
-  end
-  return nil
-end
-
-local function under_tmux(pid)
-  for _, ancestor in ipairs(util.proc_ancestors(pid, 12)) do
-    local comm = util.proc_comm(ancestor)
-    if comm and comm:find("tmux", 1, true) then
-      return true
-    end
-  end
-  return false
-end
-
--- An agent inside tmux is parented by the tmux *server*, which is a daemon with
--- no window of its own, so the plain ancestor walk dead-ends. Go around it: the
--- agent's ancestors include its pane's process, and the client attached to that
--- pane's session does have a terminal window above it.
-local function jump_via_tmux(pid)
-  local ancestors = {}
-  for _, ancestor in ipairs(util.proc_ancestors(pid, 12)) do
-    ancestors[ancestor] = true
-  end
-
-  local panes = { "tmux", "list-panes", "-a", "-F", "#{pane_pid} #{session_name}:#{window_index}.#{pane_index}" }
-  awful.spawn.easy_async(panes, function(stdout)
-    local target
-    for line in tostring(stdout):gmatch("[^\n]+") do
-      local pane_pid, pane = line:match("^(%d+)%s+(%S+)$")
-      if pane_pid and ancestors[tonumber(pane_pid)] then
-        target = pane
-        break
-      end
-    end
-    if not target then
-      return
-    end
-
-    -- One invocation so the window and pane selection cannot race.
-    awful.spawn({ "tmux", "select-window", "-t", target, ";", "select-pane", "-t", target })
-
-    local tmux_session = target:match("^([^:]+)")
-    awful.spawn.easy_async({ "tmux", "list-clients", "-t", tmux_session, "-F", "#{client_pid}" }, function(out)
-      for client_pid in tostring(out):gmatch("%d+") do
-        local c = client_for_pid(tonumber(client_pid))
-        if c then
-          c:jump_to(false)
-          return
-        end
-      end
-    end)
-  end)
-end
-
 -- ── Factory ──────────────────────────────────────────────────────────────────
 
 local function factory(args)
@@ -302,44 +235,23 @@ local function factory(args)
     end
   end
 
-  -- Focus the terminal of the session that wants attention; repeated clicks
-  -- cycle through them when several are waiting.
-  function ai.jump()
-    local waiting = sessions.waiting()
-    if #waiting == 0 then
-      return false
-    end
-    cycle = (cycle % #waiting) + 1
-    local pid = waiting[cycle].pid
-    local c = client_for_pid(pid)
-    if c then
-      c:jump_to(false)
-      return true
-    end
-    if pid and pid > 0 and under_tmux(pid) then
-      jump_via_tmux(pid)
-      return true
-    end
-    -- Nothing local to focus (an ssh session, say).
-    return false
-  end
-
   ai.widget:connect_signal("mouse::enter", function()
+    -- A TUI that has never been prompted has fired no hook; catch it now rather
+    -- than showing a popup that disagrees with what's on screen.
+    sessions.refresh()
+    ai.update()
     ai.show_popup()
   end)
   ai.widget:connect_signal("mouse::leave", function()
     ai.hide_popup()
   end)
-  ai.widget:buttons(gears.table.join(
-    awful.button({}, 1, function()
-      ai.jump()
-    end),
-    awful.button({}, 3, function()
-      -- Escape hatch: re-scan from scratch if a hook was ever missed.
-      cost.discover()
-      ai.update()
-    end)
-  ))
+  ai.widget:buttons(gears.table.join(awful.button({}, 3, function()
+    -- Escape hatch: re-read every transcript touched today, in case a hook was
+    -- ever missed.
+    cost.discover()
+    sessions.refresh()
+    ai.update()
+  end)))
 
   sessions.subscribe(ai.update)
   cost.subscribe(ai.update)
