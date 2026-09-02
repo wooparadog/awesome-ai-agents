@@ -23,9 +23,9 @@ claude code  3 sessions
 
 codex  1 session
  ● orion              working     gpt-5.6-sol      3.7M
-   today  3.7M tokens · cost n/a · weekly limit 94%
+   today  3.7M tokens · $3.12 · weekly limit 94%
 
-total today  $58.75
+total today  $61.87
 ```
 
 ## Why it costs nothing to run
@@ -172,7 +172,7 @@ transcripts — 69,233,739 tokens / $58.4294 across a day, matching exactly.
 - Agents running elsewhere (ssh, a container) are not tracked.
 - Prices are hand-maintained. An unknown model is not an error: its tokens are
   still counted, it is left out of the dollar figure, and the total is marked
-  `+`. Codex's `gpt-5.6-sol` is currently unpriced.
+  `+`.
 - Costs cover **today** only (local midnight) and are estimates: they price the
   tokens the transcripts record, with no visibility into subscription billing.
 - Linux only — liveness and click-to-focus read `/proc`.

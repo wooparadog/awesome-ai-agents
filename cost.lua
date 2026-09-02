@@ -39,6 +39,7 @@ local CACHE_PATH = GLib.get_user_cache_dir() .. "/awesome/ai-agents.json"
 local CHUNK_BYTES = 512 * 1024
 local KEEP_DAYS = 3
 local FORGET_AFTER = 7 * 86400
+local CACHE_VERSION = 2
 
 local state = { files = {} }
 local subscribers = {}
@@ -206,6 +207,9 @@ local function digest_codex_line(entry, line, today, today_iso)
   local snapshot = {
     input = tonumber(info:match('"input_tokens":(%d+)')) or 0,
     cached = tonumber(info:match('"cached_input_tokens":(%d+)')) or 0,
+    cache_write = tonumber(info:match('"cache_write_input_tokens":(%d+)'))
+      or tonumber(info:match('"cache_creation_input_tokens":(%d+)'))
+      or 0,
     output = tonumber(info:match('"output_tokens":(%d+)')) or 0,
   }
   local used = tonumber(line:match('"used_percent":([%d%.]+)'))
@@ -235,8 +239,16 @@ local function codex_counts(cx)
   local base = cx.base or {}
   local input = math.max((cx.last.input or 0) - (base.input or 0), 0)
   local cached = math.max((cx.last.cached or 0) - (base.cached or 0), 0)
+  local cache_write = math.max((cx.last.cache_write or 0) - (base.cache_write or 0), 0)
   local output = math.max((cx.last.output or 0) - (base.output or 0), 0)
-  return { input = math.max(input - cached, 0), cache_read = cached, output = output }
+  cached = math.min(cached, input)
+  cache_write = math.min(cache_write, input - cached)
+  return {
+    input = input - cached - cache_write,
+    cache_read = cached,
+    cache_write_5m = cache_write,
+    output = output,
+  }
 end
 
 -- ── Incremental digestion ────────────────────────────────────────────────────
@@ -363,8 +375,17 @@ function cost.load()
   local raw = fh:read("a")
   fh:close()
   local ok, decoded = pcall(json.decode, raw)
-  if ok and type(decoded) == "table" and type(decoded.files) == "table" then
+  if
+    ok
+    and type(decoded) == "table"
+    and decoded.version == CACHE_VERSION
+    and type(decoded.files) == "table"
+  then
     state.files = decoded.files
+  else
+    -- Parser changes can add counters that old byte offsets skipped. Rebuild
+    -- today's small working set rather than silently under-counting it forever.
+    state.files = {}
   end
   for _, e in pairs(state.files) do
     e.days = e.days or {}
@@ -374,7 +395,7 @@ end
 
 function cost.save()
   util.mkdir_p(CACHE_PATH:match("^(.*)/[^/]*$"))
-  local dump = { version = 1, files = {} }
+  local dump = { version = CACHE_VERSION, files = {} }
   for path, e in pairs(state.files) do
     dump.files[path] = {
       agent = e.agent,

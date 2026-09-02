@@ -24,12 +24,13 @@ local function anthropic(input, output, cache_read)
   }
 end
 
-local function openai(input, cached_input, output)
+local function openai(input, cached_input, output, cache_write)
   return {
     input = input,
     output = output,
-    -- OpenAI bills a cached *read* at a discount and never charges to write.
-    cache_write_5m = 0,
+    -- Codex reports one cache-write counter rather than Anthropic's 5m/1h
+    -- split, so its published cache-write rate lives in the 5m slot.
+    cache_write_5m = cache_write or 0,
     cache_write_1h = 0,
     cache_read = cached_input,
   }
@@ -61,6 +62,8 @@ pricing.models = {
   -- ── OpenAI (Codex) ────────────────────────────────────────────────────────
   -- Approximate: Codex runs on a subscription, so these are informational.
   -- Models absent here show token counts without a dollar figure.
+  ["gpt-5.6-sol"] = openai(4.00, 0.40, 20.00, 5.00),
+  ["gpt-5.6"] = openai(4.00, 0.40, 20.00, 5.00),
   ["gpt-5-codex"] = openai(1.25, 0.125, 10.00),
   ["gpt-5-mini"] = openai(0.25, 0.025, 2.00),
   ["gpt-5-nano"] = openai(0.05, 0.005, 0.40),
@@ -70,9 +73,8 @@ pricing.models = {
 -- Resolve a model id to a price table. A key matches the id exactly, or with a
 -- dated/versioned snapshot suffix ("claude-sonnet-4-5-20250929",
 -- "claude-opus-4-5@20251101") — but never as a loose prefix: "gpt-5" must not
--- silently price "gpt-5.6-sol", whose real rate we don't know. An unpriced model
--- is not an error; the widget reports its tokens and omits it from the dollar
--- total.
+-- silently price another named variant. An unpriced model is not an error; the
+-- widget reports its tokens and omits it from the dollar total.
 function pricing.lookup(model)
   if not model or model == "" or model == "<synthetic>" then
     return nil

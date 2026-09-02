@@ -98,6 +98,25 @@ local function escape(text)
   return tostring(text or ""):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
 end
 
+-- Live sessions determine the primary order, but today's usage must not vanish
+-- merely because that agent type has since exited. Append inactive types with
+-- non-zero usage so both their subtotal and the grand total remain visible.
+local function displayed_agents(snap, totals)
+  local order, included = {}, {}
+  for _, agent in ipairs(snap.order) do
+    order[#order + 1] = agent
+    included[agent] = true
+  end
+  for _, agent in ipairs({ "claude", "codex" }) do
+    local agg = totals[agent]
+    if not included[agent] and agg and agg.tokens > 0 then
+      order[#order + 1] = agent
+      included[agent] = true
+    end
+  end
+  return order
+end
+
 -- ── Popup ────────────────────────────────────────────────────────────────────
 
 local function popup_text(colors)
@@ -112,8 +131,8 @@ local function popup_text(colors)
 
   local lines, grand, priced = {}, 0, true
 
-  for _, agent in ipairs(snap.order) do
-    local group = snap.agents[agent]
+  for _, agent in ipairs(displayed_agents(snap, totals)) do
+    local group = snap.agents[agent] or {}
     local agg = totals[agent] or { tokens = 0, dollars = 0, priced = true }
 
     if #lines > 0 then
@@ -162,19 +181,6 @@ local function popup_text(colors)
 
   if #lines == 0 then
     lines[#lines + 1] = string.format("<span foreground='%s'>no agents running</span>", colors.dim)
-    for _, agent in ipairs({ "claude", "codex" }) do
-      local agg = totals[agent]
-      if agg and agg.tokens > 0 then
-        lines[#lines + 1] = string.format(
-          "%-12s today  %s tokens · %s",
-          escape(AGENT_LABEL[agent] or agent),
-          fmt_tokens(agg.tokens),
-          fmt_dollars(agg)
-        )
-        grand = grand + agg.dollars
-        priced = priced and agg.priced
-      end
-    end
   end
 
   if grand > 0 then
