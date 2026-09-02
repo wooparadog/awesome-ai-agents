@@ -46,31 +46,6 @@ function util.list_dir(path)
   return out
 end
 
--- Names only, skipping the per-entry stat that list_dir pays for. Worth it when
--- enumerating something as large as /proc, where the attributes go unused.
-function util.list_names(path)
-  local out = {}
-  local ok, enum = pcall(function()
-    return Gio.File.new_for_path(path):enumerate_children("standard::name", Gio.FileQueryInfoFlags.NONE, nil)
-  end)
-  if not ok or not enum then
-    return out
-  end
-  while true do
-    local got, info = pcall(function()
-      return enum:next_file(nil)
-    end)
-    if not got or not info then
-      break
-    end
-    out[#out + 1] = info:get_name()
-  end
-  pcall(function()
-    enum:close(nil)
-  end)
-  return out
-end
-
 function util.mkdir_p(path)
   pcall(function()
     Gio.File.new_for_path(path):make_directory_with_parents()
@@ -92,26 +67,6 @@ end
 function util.proc_comm(pid)
   local comm = util.read_file("/proc/" .. tostring(pid) .. "/comm")
   return comm and comm:gsub("%s+$", "") or nil
-end
-
--- Argv as a plain space-separated string (the kernel NUL-separates it).
-function util.proc_cmdline(pid)
-  local raw = util.read_file("/proc/" .. tostring(pid) .. "/cmdline")
-  return raw and raw:gsub("%z", " ") or nil
-end
-
-function util.proc_cwd(pid)
-  local ok, target = pcall(function()
-    return Gio.File.new_for_path("/proc/" .. tostring(pid) .. "/cwd"):query_info(
-      "standard::symlink-target",
-      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
-      nil
-    )
-  end)
-  if not ok or not target then
-    return nil
-  end
-  return target:get_symlink_target()
 end
 
 return util

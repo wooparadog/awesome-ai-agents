@@ -6,15 +6,13 @@
 -- "<agent>.<Event>.<pid>.<nanos>.json". A Gio directory monitor wakes this module
 -- when one lands, so reacting to a running agent costs nothing between events.
 --
--- Hooks alone are not enough, in two directions:
+-- Hooks cannot be trusted for liveness — a kill -9'd agent never fires SessionEnd
+-- — so every read of the session list first reaps entries whose pid has left
+-- /proc.
 --
---   * Liveness — a kill -9'd agent never fires SessionEnd, so every read of the
---     session list first reaps entries whose pid has left /proc.
---   * Discovery — an agent that has not run a turn yet has fired no hook at all.
---     Codex in particular creates its session (and its rollout file) only when
---     the first prompt is submitted, so a freshly opened TUI is invisible to
---     hooks *and* to the filesystem. `sessions.scan` walks /proc for agent
---     processes and adopts any it doesn't already know about.
+-- An agent that has not run a turn yet has fired no hook and is therefore not
+-- tracked: Codex in particular creates its session, and its rollout file, only
+-- when the first prompt is submitted.
 
 local lgi = require("lgi")
 local Gio = lgi.Gio
@@ -34,23 +32,11 @@ local EVENT_DIR = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/ai-agents"
 -- it, so sweep it away once it is clearly stale.
 local TMP_GRACE = 60
 
--- How often to walk /proc for agents that have not fired a hook yet. There is no
--- event for "a TUI opened and is sitting at its prompt", so this is the one
--- polled thing in the module; ~3ms per pass, and 0 disables it (discovery then
--- happens on hook events and when the popup opens).
-local scan_interval = 15
--- Rebuild the pid classification cache this often, bounding how long a reused
--- pid could stay mislabelled.
-local CACHE_TTL = 300
-
 local live = {}
 local subscribers = {}
-local monitor, debounce, scan_timer
+local monitor, debounce
 local watches = {}
 local recent = {}
-
--- Processes that carry an agent's name but are not a session.
-local NOT_A_SESSION = { "daemon run", "bg-pty-host", "bg-spare", "mcp-server", "app-server" }
 
 -- ── State machine ────────────────────────────────────────────────────────────
 --
@@ -66,16 +52,8 @@ local function emit()
 end
 
 local function transcript_of(s)
-  if not s.transcript and s.agent == "codex" and not s.discovered then
+  if not s.transcript and s.agent == "codex" then
     s.transcript = cost.find_codex_transcript(s.id)
-  end
-  -- A session adopted from /proc has no id to match on, so fall back to the most
-  -- recent transcript for its working directory. An agent that has not written
-  -- one yet would make that a directory listing per refresh, so back off between
-  -- attempts.
-  if not s.transcript and s.cwd and os.time() - (s.transcript_checked or 0) > 30 then
-    s.transcript_checked = os.time()
-    s.transcript = cost.find_transcript(s.agent, s.cwd)
   end
   return s.transcript
 end
@@ -240,7 +218,7 @@ local function drain()
     return a.nanos < b.nanos
   end)
 
-  local changed = sessions.scan()
+  local changed = false
   for _, ev in ipairs(events) do
     local raw = util.read_file(ev.path)
     os.remove(ev.path)
@@ -270,87 +248,6 @@ local function alive(s)
   return comm:match("^claude") ~= nil or comm:match("^codex") ~= nil
 end
 
--- ── Process discovery ────────────────────────────────────────────────────────
-
-local proc_cache, proc_cache_at = {}, 0
-
-local function classify(pid)
-  local comm = util.proc_comm(pid)
-  if not comm then
-    return false
-  end
-  local agent
-  if comm:match("^claude") then
-    agent = "claude"
-  elseif comm == "codex" then
-    agent = "codex"
-  else
-    return false
-  end
-  -- Helper processes share the agent's name: the Claude daemon and its pty
-  -- hosts, Codex's MCP/app servers. None of them is a session.
-  local args = util.proc_cmdline(pid) or ""
-  for _, marker in ipairs(NOT_A_SESSION) do
-    if args:find(marker, 1, true) then
-      return false
-    end
-  end
-  return agent
-end
-
--- Adopt agent processes that no hook has told us about. Classification is cached
--- per pid (the expensive part is reading comm/cmdline), so a repeat pass only
--- looks at pids it has never seen.
-function sessions.scan()
-  if os.time() - proc_cache_at > CACHE_TTL then
-    proc_cache, proc_cache_at = {}, os.time()
-  end
-
-  local known = {}
-  for _, s in pairs(live) do
-    if s.pid and s.pid > 0 then
-      known[s.pid] = true
-    end
-  end
-
-  local changed, seen = false, {}
-  for _, name in ipairs(util.list_names("/proc")) do
-    local pid = tonumber(name)
-    if pid then
-      seen[pid] = true
-      local agent = proc_cache[pid]
-      if agent == nil then
-        agent = classify(pid)
-        proc_cache[pid] = agent
-      end
-      if agent and not known[pid] then
-        -- No session id until this agent runs a turn; key on the pid instead,
-        -- and let the real SessionStart retire this placeholder.
-        live[agent .. "/pid:" .. pid] = {
-          agent = agent,
-          id = "pid:" .. pid,
-          pid = pid,
-          cwd = util.proc_cwd(pid),
-          state = "idle",
-          started = os.time(),
-          updated = os.time(),
-          discovered = true,
-        }
-        known[pid] = true
-        changed = true
-      end
-    end
-  end
-
-  for pid in pairs(proc_cache) do
-    if not seen[pid] then
-      proc_cache[pid] = nil
-    end
-  end
-
-  return changed
-end
-
 function sessions.reap()
   local changed = false
   for key, s in pairs(live) do
@@ -366,19 +263,14 @@ end
 -- ── Public API ───────────────────────────────────────────────────────────────
 
 function sessions.configure(opts)
-  opts = opts or {}
-  EVENT_DIR = opts.event_dir or EVENT_DIR
-  if opts.scan_interval ~= nil then
-    scan_interval = opts.scan_interval
-  end
+  EVENT_DIR = (opts or {}).event_dir or EVENT_DIR
 end
 
--- Consume any pending hook payloads and walk /proc, without waiting for the
--- directory monitor. Used by the widget's rescan binding, and by tests that run
--- outside a GLib main loop.
+-- Consume any pending hook payloads without waiting for the directory monitor.
+-- Used by the widget's rescan binding, and by tests that run outside a GLib main
+-- loop.
 function sessions.refresh()
-  local drained = drain()
-  return drained
+  return drain()
 end
 
 -- Most recent events applied, oldest first — for debugging what an agent
@@ -440,7 +332,6 @@ end
 
 function sessions.start()
   util.mkdir_p(EVENT_DIR)
-  sessions.scan()
   drain()
 
   -- Coalesce the burst a single turn produces (Stop plus its neighbours land
@@ -454,18 +345,6 @@ function sessions.start()
       end
     end,
   })
-
-  if scan_interval and scan_interval > 0 then
-    scan_timer = gears.timer({
-      timeout = scan_interval,
-      callback = function()
-        if sessions.scan() or sessions.reap() then
-          emit()
-        end
-      end,
-    })
-    scan_timer:start()
-  end
 
   local ok, m = pcall(function()
     return Gio.File.new_for_path(EVENT_DIR):monitor_directory(Gio.FileMonitorFlags.NONE, nil)

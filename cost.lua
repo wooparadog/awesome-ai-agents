@@ -477,37 +477,6 @@ function cost.find_codex_transcript(session_id)
   return nil
 end
 
--- Best-effort transcript for a session discovered from /proc, which has no
--- session id to match on — only its working directory.
-function cost.find_transcript(agent, cwd)
-  if not agent or not cwd then
-    return nil
-  end
-
-  if agent == "claude" then
-    -- Claude names a project directory after the cwd with "/" and "." replaced
-    -- by "-", e.g. /home/me/.config/awesome -> -home-me--config-awesome.
-    local slug = cwd:gsub("[/.]", "-")
-    local newest, newest_at = nil, -1
-    for _, f in ipairs(util.list_dir(CLAUDE_PROJECTS .. "/" .. slug)) do
-      if not f.is_dir and f.name:match("%.jsonl$") and f.mtime > newest_at then
-        newest, newest_at = f.path, f.mtime
-      end
-    end
-    return newest
-  end
-
-  -- Codex rollouts don't encode the cwd in their name, but digesting one records
-  -- it, so match against what we've already parsed.
-  local newest, newest_at = nil, -1
-  for path, e in pairs(state.files) do
-    if e.agent == "codex" and e.cwd == cwd and (e.seen_at or 0) > newest_at then
-      newest, newest_at = path, e.seen_at or 0
-    end
-  end
-  return newest
-end
-
 -- Today's usage for a single transcript.
 function cost.for_transcript(path)
   local e = path and state.files[path]

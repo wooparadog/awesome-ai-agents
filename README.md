@@ -26,18 +26,15 @@ codex  1 session
 total today  $58.75
 ```
 
-## Why it costs almost nothing to run
+## Why it costs nothing to run
 
-**Running agents report themselves.** Both CLIs support hooks, so each one says
-when it starts, submits a prompt, blocks on a permission prompt, finishes a turn,
-or exits. Between those events, tracking a busy agent costs nothing at all.
+**Nothing polls.** Both CLIs support hooks, so each one reports when it starts,
+submits a prompt, blocks on a permission prompt, finishes a turn, or exits. An
+idle desktop with idle agents costs exactly zero CPU — there is no timer anywhere
+in the module.
 
-**Except for one thing no hook reports: an agent that hasn't run a turn yet.**
-Codex creates its session — and its rollout file — only when the first prompt is
-submitted, so a freshly opened TUI is invisible to hooks *and* to the filesystem.
-That gap is covered by a `/proc` walk every `scan_interval` seconds (default 15,
-~3ms a pass, `0` disables it and falls back to scanning on hook events and when
-the popup opens).
+The flip side is that an agent which has not run a turn is not tracked, because
+it has reported nothing: see Known limits.
 
 **Costs are computed incrementally.** Transcripts are append-only JSONL, so each
 file carries a byte offset and a refresh only parses the bytes appended since
@@ -97,7 +94,6 @@ local ai = ai_agents({
 | `codex_sessions` | `~/.codex/sessions` | Codex rollout root |
 | `cache_path` | `$XDG_CACHE_HOME/awesome/ai-agents.json` | offset/usage cache |
 | `event_dir` | `$XDG_RUNTIME_DIR/ai-agents` | must match `hook.sh` (`AI_AGENTS_EVENT_DIR`) |
-| `scan_interval` | `15` | seconds between `/proc` discovery passes; `0` disables |
 
 `state` carries `total`, `busy`, `asking`, `done`, `order` (agent names),
 `agents` (grouped session lists) and `cost` (today's per-agent totals). Each
@@ -139,15 +135,11 @@ Several things make that tracking hold up in practice:
   state untouched — guessing would clear a working agent's badge.
 - **One session per process.** A new session on a pid retires whatever was there
   before, so `/clear` and `/resume` don't leave superseded sessions behind
-  inflating the count. This also means a session adopted from `/proc` is replaced
-  cleanly once it fires its first hook.
+  inflating the count.
 - **Clearing `asking`.** Nothing reports that *you answered*. While a session is
   blocked, its transcript is watched: the agent writes again the moment it is
   unblocked, which clears the badge instead of leaving it stuck until the turn
   ends.
-- **Helper processes.** The Claude daemon, its pty hosts, Codex's MCP/app servers
-  and the `node` wrapper all carry an agent's name but are not sessions, and are
-  filtered out of discovery.
 
 `PreToolUse` / `PostToolUse` are deliberately not registered: they fire hundreds
 of times per turn and add no signal.
@@ -169,12 +161,13 @@ transcripts — 69,233,739 tokens / $58.4294 across a day, matching exactly.
 
 ## Known limits
 
-- A session running on another machine (ssh, a container) is invisible: both
-  discovery paths are local.
-- A discovered session has no session id to match a transcript against, so its
-  usage is read from the most recent transcript for its working directory. With
-  two agents in one directory that can attribute usage to the wrong row until the
-  session fires its first hook.
+- **An agent that has not run a turn yet is invisible.** Nothing reports it:
+  Codex creates its session — and its rollout file — only when the first prompt
+  is submitted, so a freshly opened TUI is unknown to hooks and to the filesystem
+  alike. It appears as soon as it does anything.
+- Likewise, a session already running when the hooks were installed stays
+  invisible until its next turn fires one.
+- Agents running elsewhere (ssh, a container) are not tracked.
 - Prices are hand-maintained. An unknown model is not an error: its tokens are
   still counted, it is left out of the dollar figure, and the total is marked
   `+`. Codex's `gpt-5.6-sol` is currently unpriced.

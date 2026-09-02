@@ -19,13 +19,9 @@
 --   codex_sessions           default ~/.codex/sessions
 --   cache_path               default $XDG_CACHE_HOME/awesome/ai-agents.json
 --   event_dir                default $XDG_RUNTIME_DIR/ai-agents (match hook.sh)
---   scan_interval            seconds between /proc discovery passes (default 15,
---                            0 disables; discovery then runs on hook events and
---                            when the popup opens)
 --
--- Session tracking is hook-driven (see sessions.lua). The one exception is
--- discovering an agent that has not run a turn yet, which no hook reports; that
--- costs a periodic /proc walk, tunable with `scan_interval`.
+-- Everything is event-driven (see sessions.lua): no timer runs, so an idle
+-- desktop with idle agents costs no CPU at all.
 --
 -- The returned handle exposes `widget`, `state`, `update()`, `show_popup()` and
 -- `hide_popup()`.
@@ -236,8 +232,7 @@ local function factory(args)
   end
 
   ai.widget:connect_signal("mouse::enter", function()
-    -- A TUI that has never been prompted has fired no hook; catch it now rather
-    -- than showing a popup that disagrees with what's on screen.
+    -- Pick up anything the directory monitor has not delivered yet.
     sessions.refresh()
     ai.update()
     ai.show_popup()
