@@ -87,6 +87,13 @@ local function project_label(cwd)
   return last
 end
 
+-- Claude Code's configured model can carry a variant suffix ("claude-opus-5[1m]")
+-- that transcripts never record. Strip it so the fallback and the transcript
+-- render the same id instead of the column changing after the first turn.
+local function base_model(id)
+  return id and (id:gsub("%b[]", "")) or nil
+end
+
 local function escape(text)
   return tostring(text or ""):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
 end
@@ -122,16 +129,17 @@ local function popup_text(colors)
 
     for _, s in ipairs(group) do
       local usage = cost.for_transcript(s.transcript)
-      -- The session's own report wins: hook payloads carry the model it is
-      -- configured with *now*, so switching models shows up on the session's next
-      -- event. The transcript only names the new model once a turn has completed
-      -- under it, which lags a switch by a whole turn.
+      -- The transcript wins. A hook payload's `model` is the model the session
+      -- *started* with and never changes, so a session that switched keeps
+      -- reporting the old one for the rest of its life; the transcript records
+      -- what each turn actually ran. The payload is only a fallback, for a
+      -- session that has not completed a turn yet.
       lines[#lines + 1] = string.format(
         " %s %-20s %-10s %-17s %6s",
         marker[s.state] or "·",
         escape(project_label(s.cwd)),
         STATE_LABEL[s.state] or s.state,
-        escape(s.model or usage.model or "?"),
+        escape(usage.model or base_model(s.model) or "?"),
         fmt_tokens(usage.tokens)
       )
     end
