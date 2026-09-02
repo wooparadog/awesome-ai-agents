@@ -3,6 +3,8 @@
 An AwesomeWM wibar indicator for **Claude Code** and **Codex** sessions: how many
 are running, how many are blocked waiting on you, and what today's tokens cost.
 
+![The indicator in a wibar, with its hover popup open](doc/screenshot.png)
+
 ```
 󰚩 3          three sessions, all working
 󰚩 3 ?1       one is asking you something          (red)
