@@ -485,13 +485,16 @@ function cost.for_transcript(path)
     return { tokens = 0, dollars = 0, model = e and e.model, priced = true }
   end
 
+  -- `e.model` is the last model parsed out of the file, i.e. the one the session
+  -- most recently ran. Deliberately not taken from the loop below: bucket.models
+  -- is keyed by model, and pairs() order is arbitrary, so a session that used two
+  -- models today would report whichever one happened to come out last.
   local out = { tokens = 0, dollars = 0, model = e.model, priced = true }
   for model, counts in pairs(bucket.models) do
     local dollars, known = pricing.cost(model, counts)
     out.tokens = out.tokens + total_tokens(counts)
     out.dollars = out.dollars + dollars
     out.priced = out.priced and known
-    out.model = model
   end
   local cx = codex_counts(bucket.codex)
   if cx then

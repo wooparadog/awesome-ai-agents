@@ -122,12 +122,16 @@ local function popup_text(colors)
 
     for _, s in ipairs(group) do
       local usage = cost.for_transcript(s.transcript)
+      -- The session's own report wins: hook payloads carry the model it is
+      -- configured with *now*, so switching models shows up on the session's next
+      -- event. The transcript only names the new model once a turn has completed
+      -- under it, which lags a switch by a whole turn.
       lines[#lines + 1] = string.format(
-        " %s %-20s %-10s %-13s %6s",
+        " %s %-20s %-10s %-17s %6s",
         marker[s.state] or "·",
         escape(project_label(s.cwd)),
         STATE_LABEL[s.state] or s.state,
-        escape(usage.model or s.model or "?"),
+        escape(s.model or usage.model or "?"),
         fmt_tokens(usage.tokens)
       )
     end
