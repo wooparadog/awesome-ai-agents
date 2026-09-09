@@ -12,14 +12,27 @@ complete=true
 for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
   [ -f "$run" ] || continue
   path=$(jq -r '.transcript//empty' "$run")
+  agent=$(jq -r '.agent' "$run"); sid=$(jq -r '.native_session_id' "$run"); rid=$(jq -r '.run_id' "$run")
+  if [ ! -f "$path" ] && [ "$agent" = codex ]; then
+    path=$(find "${CODEX_HOME:-$HOME/.codex}/sessions" "${CODEX_HOME:-$HOME/.codex}/archived_sessions" \
+      -type f -name "*${sid}*.jsonl" -print -quit 2>/dev/null || true)
+  fi
+  # End-only hooks and setup probes may never have had a transcript. They do not
+  # make collection of all observed transcripts permanently incomplete.
+  if [ -z "$path" ] && [ "$(jq -r '.closed//false' "$run")" = true ] &&
+    [ -z "$(jq -r '.transcript//empty' "$run")" ]; then continue; fi
   [ -f "$path" ] || { complete=false; continue; }
   key=$(printf '%s' "$path" | sha256sum | cut -d ' ' -f1)
   cursor="$STATE/cursors/$key.json"
   [ -f "$cursor" ] || printf '{"offset":0,"model":null}' > "$cursor"
   offset=$(jq '.offset' "$cursor"); size=$(stat -c %s "$path")
+  mode=$(jq -r '.mode//"cumulative"' "$cursor")
+  # Re-read existing Codex transcripts once to recover authoritative per-response
+  # usage. Stable response IDs make replay safe, including copied transcripts.
+  if [ "$agent" = codex ] && [ "$(jq -r '.version//0' "$cursor")" -lt 2 ]; then offset=0; fi
   inode=$(stat -c '%d:%i' "$path")
   discard=$(jq -r '.discard//false' "$cursor")
-  if [ "$size" -lt "$offset" ] || [ "$(jq -r '.inode//empty' "$cursor")" != "$inode" ]; then offset=0; discard=false; fi
+  if [ "$size" -lt "$offset" ] || [ "$(jq -r '.inode//empty' "$cursor")" != "$inode" ]; then offset=0; discard=false; mode=cumulative; fi
   [ "$size" -gt "$offset" ] || continue
   # Bounded chunk, retaining partial tail for the next scan.
   dd if="$path" iflag=skip_bytes,count_bytes skip="$offset" count=16777216 status=none > "$work/chunk"
@@ -36,16 +49,18 @@ for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
     continue
   fi
   if [ "$discard" = true ]; then sed '1d' "$work/complete" > "$work/rest"; mv "$work/rest" "$work/complete"; fi
-  agent=$(jq -r '.agent' "$run"); sid=$(jq -r '.native_session_id' "$run"); rid=$(jq -r '.run_id' "$run")
+  if [ "$agent" = codex ] && jq -Rse 'split("\n") | any(.[]; (try fromjson catch {}) | .type=="token_usage_record" and .payload.response_id!=null)' "$work/complete" >/dev/null; then mode=responses; fi
   model=$(jq -r '.model//empty' "$cursor")
-  if ! jq -Rnc --arg agent "$agent" --arg session "$sid" --arg run "$rid" --arg model "$model" -f "$ROOT/usage.jq" < "$work/complete" > "$work/parsed"; then
+  if [ "$offset" -eq 0 ]; then model=""; fi
+  if ! jq -Rnc --arg agent "$agent" --arg session "$sid" --arg run "$rid" --arg model "$model" --arg mode "$mode" -f "$ROOT/usage.jq" < "$work/complete" > "$work/parsed"; then
     : > "$STATE/dropped.invalid-$key"
     complete=false
     continue
   fi
   if jq -se 'any(.[]; .invalid)' "$work/parsed" >/dev/null; then : > "$STATE/dropped.invalid-$key"; fi
   jq -c '.records[] | select(.model!="<synthetic>")' "$work/parsed" > "$work/records"
-  jq -sc 'range(0;length;64) as $i | {kind:"usage",records:.[$i:$i+64]}' "$work/records" > "$work/batches"
+  jq -sc '(if .[0].provider=="anthropic" then unique_by(del(.occurred_at)) else . end) |
+    range(0;length;64) as $i | {kind:"usage",records:.[$i:$i+64]}' "$work/records" > "$work/batches"
   while IFS= read -r record; do
     # Stable identity across retries and copied records; provider dedup happens centrally.
     id=$(printf '%s' "$record" | sha256sum | cut -d ' ' -f1)
@@ -55,7 +70,7 @@ for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
   done < "$work/batches"
   finalmodel=$model
   [ ! -s "$work/parsed" ] || finalmodel=$(tail -n 1 "$work/parsed" | jq -r '.model//empty')
-  jq -n --argjson offset "$((offset+bytes))" --arg model "$finalmodel" --arg inode "$inode" '{offset:$offset,model:$model,inode:$inode}' > "$work/cursor"
+  jq -n --argjson offset "$((offset+bytes))" --arg model "$finalmodel" --arg inode "$inode" --arg mode "$mode" '{offset:$offset,model:$model,inode:$inode,mode:$mode,version:2}' > "$work/cursor"
   mv "$work/cursor" "$cursor"
   [ "$((offset+bytes))" -ge "$size" ] || complete=false
 done

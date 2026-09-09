@@ -61,6 +61,12 @@ Run entries include `id`, `session_id`, `execution_id`, `installation_id`, `agen
 path describes the reporting installation and must never be interpreted as a
 process or path on the viewing machine.
 
+Reporters reconcile no more often than every five minutes by default. The collector
+allows ten minutes of presence freshness before marking a run stale. This lease
+is separate from the two-minute maximum age accepted for a newly submitted presence observation.
+Hooks can submit a fresh observation of their own identified agent process without
+waiting for reconciliation. Replayed lifecycle events alone never renew presence.
+
 Activity states are `unknown`, `idle`, `busy`, `asking`, `done`, and `ended`.
 Snapshot runs are current; ended runs are available in history. Freshness is a
 separate value: `live`, `stale`, or `unverified`. Lack of recent activity does not
@@ -188,9 +194,19 @@ uncached portion. Stable native record identity must survive transcript copies.
 Send cumulative evidence as recorded; the server derives deltas and handles missing
 baselines and resets. A run must already have been ingested before attaching usage.
 
+For modern Codex transcripts, use `token_usage_record` response IDs as native
+record IDs, the originating thread ID as `stream_id`, `responses-v1` as the epoch,
+and per-response deltas. These supersede legacy cumulative estimates from the first
+exact response onward, so upgrades replay the transcript from the beginning. Delta input excludes
+both cached reads and cache writes, which have their own counters.
+
 Successful event/usage responses contain an `accepted` array of event IDs or native
 usage record IDs, respectively. Remove outbox items only after acknowledgement.
 Identical retries are safe; identity reuse with different content returns 409.
+Claude content blocks can repeat the same message/request usage with different
+local timestamps. If all other accounting fields match, the first accepted
+timestamp is retained and the repeated record is acknowledged without counting it
+again. Changed models or counters still return 409.
 
 ## Errors and evolution
 

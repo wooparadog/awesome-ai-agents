@@ -135,6 +135,7 @@ export async function presence(env: Env, who: Identity, payload: Json) {
 export async function usage(env: Env, who: Identity, payload: Json) {
   const statements: D1PreparedStatement[] = [];
   const accepted: string[] = [];
+  const ownedRuns = new Set<string>();
   for (const value of list(payload.records, 64)) {
     const r = object(value),
       counts = object(r.counters),
@@ -151,12 +152,15 @@ export async function usage(env: Env, who: Identity, payload: Json) {
       throw new HttpError(400, "invalid measurement_kind");
     if (time < Date.now() - 90 * 86400000)
       throw new HttpError(410, "usage exceeds history window");
-    const owner = await env.DB.prepare(
-      "SELECT id FROM session_runs WHERE workspace_id=? AND id=? AND installation_id=?",
-    )
-      .bind(who.workspace_id, run, who.installation_id)
-      .first();
-    if (!owner) throw new HttpError(409, "run not yet ingested");
+    if (!ownedRuns.has(run)) {
+      const owner = await env.DB.prepare(
+        "SELECT id FROM session_runs WHERE workspace_id=? AND id=? AND installation_id=?",
+      )
+        .bind(who.workspace_id, run, who.installation_id)
+        .first();
+      if (!owner) throw new HttpError(409, "run not yet ingested");
+      ownedRuns.add(run);
+    }
     const input = integer(counts.input ?? 0),
       output = integer(counts.output ?? 0),
       cached = integer(counts.cache_read ?? 0),

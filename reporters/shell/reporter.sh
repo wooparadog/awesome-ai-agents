@@ -18,7 +18,7 @@ case ${1:-help} in
     printf '%s' "$token" | jq -Rse 'test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{40,100}$")' >/dev/null || error 'invalid token'
     printf '%s\n' "$token" | atomic "$CONFIG/write.token"
     jq -n --arg url "${2%/}" --arg installation "$3" '{url:$url,installation_id:$installation}' | atomic "$CONFIG/config.json"
-    printf 'Configured installation %s. Schedule reporter.sh reconcile every 30 seconds.\n' "$3"
+    printf 'Configured installation %s. Schedule reporter.sh reconcile every 5 minutes.\n' "$3"
     exit 0 ;;
   help) printf '%s\n' 'reporter.sh init URL INSTALLATION_ID TOKEN_FILE | hook AGENT EVENT | flush | reconcile | status'; exit 0 ;;
 esac
@@ -75,6 +75,7 @@ post() {
 }
 flush() {
   limit=$1; budget=$2
+  deadline=$(( $(date +%s) + 90 ))
   flock -u 9
   exec 8>"$STATE/flush.lock"
   flock -n 8 || return 0
@@ -82,6 +83,7 @@ flush() {
   sent=0
   for f in "$STATE"/outbox/*.json; do
     [ -f "$f" ] || break
+    [ "$(date +%s)" -lt "$deadline" ] || break
     sent=$((sent+1)); [ "$sent" -le "$limit" ] || break
     kind=$(jq -r '.kind' "$f")
     if [ "$kind" = event ]; then endpoint=/v1/events; jq '{schema_version:1,events:[.event]}' "$f" > "$STATE/request.$$"
@@ -143,14 +145,28 @@ case $MODE in
     data=$(printf '%s' "$safe" | jq -c --argjson pid "$pid" '{cwd,model,source,pid:$pid,notification_type:(.notification_type//.notification_category)}')
     queue_event "$file" "$3" "$data"
     if [ "$3" = SessionEnd ]; then jq '.closed=true' "$file" | atomic "$file"; fi
-    prune; flush 1 1 ;;
-  flush) prune; flush 64 2 ;;
+    # A hook can verify its own ancestor immediately; never replay this evidence.
+    # Keep a private copy because flushing may read other queued runs first.
+    hook_run=$(jq -c '{run_id,execution_id,sequence}' "$file")
+    hook_fp=$fp; hook_pid=$pid; hook_source=$3
+    prune; flush 1 1
+    if [ "$hook_source" != SessionEnd ] && [ "$hook_pid" -gt 0 ] &&
+      [ "$(fingerprint "$hook_pid" 2>/dev/null || true)" = "$hook_fp" ]; then
+      usage_ready=false; [ ! -f "$STATE/usage-ready" ] || usage_ready=true
+      [ "$(find "$STATE/outbox" -name '*.json' | wc -l)" -eq 0 ] || usage_ready=false
+      jq -n --argjson run "$hook_run" --argjson time "$(now)" --argjson usage "$usage_ready" \
+        --argjson dropped "$(find "$STATE" -maxdepth 1 -name 'dropped.*' | wc -l)" \
+        '{schema_version:1,observed_at:$time,runs:[$run],usage:$usage,dropped:$dropped}' > "$STATE/request.$$"
+      post /v1/presence "$STATE/request.$$" 1
+    fi ;;
+  flush) prune; flush 64 10 ;;
   status)
     jq -n --arg installation "$INSTALLATION" --argjson queued "$(find "$STATE/outbox" -name '*.json' | wc -l)" \
       --argjson quarantined "$(find "$STATE/quarantine" -name '*.json' | wc -l)" --argjson dropped "$(find "$STATE" -maxdepth 1 -name 'dropped.*' | wc -l)" \
       '{installation:$installation,queued:$queued,quarantined:$quarantined,dropped:$dropped}' ;;
   reconcile)
     presence_file="$STATE/presence.ndjson"; : > "$presence_file"
+    presence_observed=$(now)
     for file in "$STATE"/runs/*.json; do
       [ -f "$file" ] || break
       pid=$(jq -r '.pid' "$file")
@@ -172,14 +188,20 @@ case $MODE in
     done
     flock -u 9
     "$ROOT/usage.sh" "$STATE"
+    prune; flush 64 10
     usage_ready=false; [ ! -f "$STATE/usage-ready" ] || usage_ready=true
-    jq -sc --argjson time "$(now)" --argjson usage "$usage_ready" --argjson dropped "$(find "$STATE" -maxdepth 1 -name 'dropped.*' | wc -l)" \
+    [ "$(find "$STATE/outbox" -name '*.json' | wc -l)" -eq 0 ] || usage_ready=false
+    # Slow scans/uploads cannot turn an old observation into fresh evidence.
+    if [ "$(( $(now) - presence_observed ))" -ge 120000 ]; then
+      : > "$presence_file"; presence_observed=$(now)
+    fi
+    jq -sc --argjson time "$presence_observed" --argjson usage "$usage_ready" --argjson dropped "$(find "$STATE" -maxdepth 1 -name 'dropped.*' | wc -l)" \
       'range(0; ([length,1]|max);128) as $i | {schema_version:1,observed_at:$time,runs:.[$i:$i+128],usage:$usage,dropped:$dropped}' "$presence_file" > "$STATE/presence-batches.$$"
     while IFS= read -r batch; do
       printf '%s' "$batch" > "$STATE/request.$$"
       post /v1/presence "$STATE/request.$$" 2
     done < "$STATE/presence-batches.$$"
     rm -f "$STATE/presence-batches.$$"
-    prune; flush 64 2 ;;
+    ;;
   *) error 'unknown command' ;;
 esac

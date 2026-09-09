@@ -50,6 +50,19 @@ The [shell reporter guide](../reporters/shell/README.md) covers hook installatio
 and scheduling. The [AwesomeWM guide](../clients/awesomewm/README.md) covers the
 currently available viewer.
 
+Reporters reconcile at five-minute intervals; the collector allows a ten-minute
+freshness window so healthy sessions remain live between reports.
+
+Usage coverage and pricing are separate: unavailable model rates do not make
+token collection incomplete. Codex response records supersede cumulative estimates
+for the same thread while retaining the original evidence. Apply all migrations
+before updating reporters; their first reconciliation replays Codex transcripts.
+
+GPT-6 Astra costs use the [published standard API rates](https://developers.openai.com/api/docs/models/gpt-6-astra),
+verified September 9, 2026: $10 input, $1 cached input, $12.50 cache writes, and $50
+output per million tokens. These are API cost estimates; Codex subscription billing,
+fast mode, and long-context premiums are not inferred from the collected counters.
+
 Future Windows and macOS clients use the same [public protocol](../docs/client-protocol.md).
 They do not need to copy the AwesomeWM implementation or the Linux process helpers.
 

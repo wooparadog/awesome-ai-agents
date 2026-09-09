@@ -164,8 +164,8 @@ def main():
         units = (
             '[Unit]\nDescription=Report AI agent activity\n\n[Service]\nType=oneshot\n'
             f'ExecStart="{reporter}" reconcile\nTimeoutStartSec=180\n',
-            '[Unit]\nDescription=Reconcile AI agent activity\n\n[Timer]\nOnBootSec=15s\n'
-            'OnUnitInactiveSec=30s\nAccuracySec=1s\n\n[Install]\nWantedBy=timers.target\n',
+            '[Unit]\nDescription=Reconcile AI agent activity\n\n[Timer]\nOnBootSec=5min\n'
+            'OnUnitInactiveSec=5min\nAccuracySec=1s\n\n[Install]\nWantedBy=timers.target\n',
         )
         if args.dry_run:
             print("would " + ("remove" if args.uninstall else "install and enable") + " user reconciliation timer")
