@@ -381,3 +381,17 @@ it("archives old usage without deleting the baseline for recent cumulative total
       .first(),
   ).not.toBeNull();
 });
+
+it("keeps migration DDL separate for D1's remote SQL splitter", () => {
+  for (const migration of TEST_MIGRATIONS) {
+    for (const query of migration.queries) {
+      // An unbalanced CASE/END in Wrangler's splitter can swallow following
+      // tables into a trigger, which local execution tolerates but remote rejects.
+      const declarations =
+        query.match(
+          /\bCREATE\s+(?:TABLE|VIEW|TRIGGER|(?:UNIQUE\s+)?INDEX)\b/gi,
+        ) || [];
+      expect(declarations.length, migration.name).toBeLessThanOrEqual(1);
+    }
+  }
+});

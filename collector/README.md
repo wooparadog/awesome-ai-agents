@@ -4,6 +4,13 @@ TypeScript Worker + D1 + one hibernating WebSocket Durable Object per workspace.
 The reporter uses ordinary authenticated HTTP; the widget subscribes to revisions
 and fetches snapshots only when needed. The HTTP API is independent of any particular desktop or viewer.
 
+## Hosted collector
+
+The collector is deployed at [ai-agents-collector.stdimg.workers.dev](https://ai-agents-collector.stdimg.workers.dev).
+All application routes require a token; an unauthenticated request returns 401.
+The configured D1 database is `ai-agents` in APAC, and the scheduled maintenance
+trigger runs every minute. See [deployment details](../docs/deployment.md).
+
 ## Local development
 
 Requires Node.js compatible with the locked Wrangler version and pnpm 11.
@@ -28,10 +35,11 @@ can generate revocation SQL with `--revoke TOKEN_ID --workspace personal --outpu
 add `--local` to apply to local D1. Revoked credentials immediately fail HTTP reads;
 existing subscriptions expire within five minutes and must reauthenticate.
 
-The all-zero D1 ID in `wrangler.jsonc` is a local-development placeholder. Before
-any future deployment, create and bind the intended D1 database, apply its
-migrations, and provision credentials deliberately. Nothing in the test or setup
-scripts uses a remote binding or deploys resources.
+`wrangler.jsonc` now identifies the deployed account and D1 database. `pnpm dev`
+and `pnpm migrate:local` still use local storage. Remote database operations require
+an explicit `--remote` flag, and publishing code requires `wrangler deploy`. Clones
+intended for another account must replace the account and database identifiers.
+The test scripts do not use remote bindings or deploy resources.
 
 ## Connect reporters and clients
 
@@ -97,8 +105,7 @@ pnpm test
 These checks exercise the Worker, D1, and Durable Objects in workerd without desktop
 dependencies. Run `./scripts/check.sh` from the repository root for all component
 checks; see [CONTRIBUTING.md](../CONTRIBUTING.md) for their development dependencies.
-Cloudflare production placement, billing, and deployed hibernation behavior still
-require a future staging deployment.
+Production deployment checks and their scope are recorded in the [deployment notes](../docs/deployment.md).
 
 Collection begins when an installed hook first observes a session. Transcripts
 for sessions never observed by hooks are not automatically imported. The shell

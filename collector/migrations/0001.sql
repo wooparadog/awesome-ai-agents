@@ -1,3 +1,4 @@
+-- Parenthesize CASE expressions so D1 remote splitting keeps trigger bodies intact.
 PRAGMA foreign_keys = ON;
 CREATE TABLE workspaces (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, reporting_timezone TEXT NOT NULL DEFAULT 'Asia/Singapore',
@@ -65,15 +66,15 @@ CREATE INDEX event_history ON events(workspace_id,run_id,received_at,id);
 CREATE INDEX event_retention ON events(received_at);
 -- Conflicting retries abort the entire ingestion batch; identical retries do nothing.
 CREATE TRIGGER event_validate BEFORE INSERT ON events BEGIN
- SELECT CASE WHEN EXISTS(SELECT 1 FROM events WHERE workspace_id=NEW.workspace_id
+ SELECT (CASE WHEN EXISTS(SELECT 1 FROM events WHERE workspace_id=NEW.workspace_id
   AND (id=NEW.id OR (execution_id=NEW.execution_id AND sequence=NEW.sequence))
-  AND (id!=NEW.id OR payload_hash!=NEW.payload_hash)) THEN RAISE(ABORT,'event conflict') END;
- SELECT CASE WHEN EXISTS(SELECT 1 FROM executions WHERE workspace_id=NEW.workspace_id AND id=NEW.execution_id
-  AND (installation_id!=NEW.installation_id OR agent!=NEW.agent)) THEN RAISE(ABORT,'execution conflict') END;
- SELECT CASE WHEN EXISTS(SELECT 1 FROM session_runs WHERE workspace_id=NEW.workspace_id
+  AND (id!=NEW.id OR payload_hash!=NEW.payload_hash)) THEN RAISE(ABORT,'event conflict') END);
+ SELECT (CASE WHEN EXISTS(SELECT 1 FROM executions WHERE workspace_id=NEW.workspace_id AND id=NEW.execution_id
+  AND (installation_id!=NEW.installation_id OR agent!=NEW.agent)) THEN RAISE(ABORT,'execution conflict') END);
+ SELECT (CASE WHEN EXISTS(SELECT 1 FROM session_runs WHERE workspace_id=NEW.workspace_id
   AND (id=NEW.run_id OR (execution_id=NEW.execution_id AND generation=NEW.generation))
   AND (id!=NEW.run_id OR execution_id!=NEW.execution_id OR generation!=NEW.generation OR session_id!=NEW.session_id))
-  THEN RAISE(ABORT,'run conflict') END;
+  THEN RAISE(ABORT,'run conflict') END);
 END;
 CREATE TRIGGER event_project AFTER INSERT ON events BEGIN
  INSERT INTO executions(workspace_id,id,installation_id,agent,created_at)
@@ -84,18 +85,18 @@ CREATE TRIGGER event_project AFTER INSERT ON events BEGIN
  WHERE workspace_id=NEW.workspace_id AND execution_id=NEW.execution_id AND generation<NEW.generation AND ended_at IS NULL;
  INSERT INTO session_runs(workspace_id,id,installation_id,session_id,execution_id,generation,started_at,last_activity_at,ended_at,end_reason,state)
  SELECT NEW.workspace_id,NEW.run_id,NEW.installation_id,NEW.session_id,NEW.execution_id,NEW.generation,NEW.observed_at,NEW.observed_at,
- CASE WHEN current_generation>NEW.generation THEN NEW.observed_at END,
- CASE WHEN current_generation>NEW.generation THEN 'superseded' END,
- CASE WHEN current_generation>NEW.generation THEN 'ended' ELSE 'unknown' END
+ (CASE WHEN current_generation>NEW.generation THEN NEW.observed_at END) ,
+ (CASE WHEN current_generation>NEW.generation THEN 'superseded' END) ,
+ (CASE WHEN current_generation>NEW.generation THEN 'ended' ELSE 'unknown' END)
  FROM executions WHERE workspace_id=NEW.workspace_id AND id=NEW.execution_id ON CONFLICT DO NOTHING;
  UPDATE executions SET current_generation=MAX(current_generation,NEW.generation),last_sequence=MAX(last_sequence,NEW.sequence)
  WHERE workspace_id=NEW.workspace_id AND id=NEW.execution_id;
  UPDATE session_runs SET cwd=COALESCE(json_extract(NEW.data_json,'$.cwd'),cwd),model=COALESCE(json_extract(NEW.data_json,'$.model'),model),
  pid=COALESCE(json_extract(NEW.data_json,'$.pid'),pid),metadata_sequence=NEW.sequence,last_activity_at=NEW.observed_at
  WHERE workspace_id=NEW.workspace_id AND id=NEW.run_id AND metadata_sequence<NEW.sequence;
- UPDATE session_runs SET state=CASE WHEN NEW.canonical_type='idle.notification' AND state='asking' THEN state ELSE NEW.target_state END,
- state_sequence=NEW.sequence,ended_at=CASE WHEN NEW.target_state='ended' THEN NEW.observed_at END,
- end_reason=CASE WHEN NEW.target_state='ended' THEN COALESCE(json_extract(NEW.data_json,'$.reason'),'hook') END
+ UPDATE session_runs SET state= (CASE WHEN NEW.canonical_type='idle.notification' AND state='asking' THEN state ELSE NEW.target_state END) ,
+ state_sequence=NEW.sequence,ended_at= (CASE WHEN NEW.target_state='ended' THEN NEW.observed_at END) ,
+ end_reason= (CASE WHEN NEW.target_state='ended' THEN COALESCE(json_extract(NEW.data_json,'$.reason'),'hook') END)
  WHERE workspace_id=NEW.workspace_id AND id=NEW.run_id AND ended_at IS NULL AND state_sequence<NEW.sequence AND NEW.target_state IS NOT NULL;
  UPDATE installations SET last_contact_at=NEW.received_at WHERE workspace_id=NEW.workspace_id AND id=NEW.installation_id;
  UPDATE workspaces SET revision=revision+1 WHERE id=NEW.workspace_id;
@@ -121,8 +122,8 @@ CREATE TABLE usage_observations (
  FOREIGN KEY(workspace_id,run_id) REFERENCES session_runs(workspace_id,id)
 );
 CREATE TRIGGER usage_validate BEFORE INSERT ON usage_records BEGIN
- SELECT CASE WHEN EXISTS(SELECT 1 FROM usage_records WHERE workspace_id=NEW.workspace_id
- AND id=NEW.id AND payload_hash!=NEW.payload_hash) THEN RAISE(ABORT,'usage conflict') END;
+ SELECT (CASE WHEN EXISTS(SELECT 1 FROM usage_records WHERE workspace_id=NEW.workspace_id
+ AND id=NEW.id AND payload_hash!=NEW.payload_hash) THEN RAISE(ABORT,'usage conflict') END);
 END;
 CREATE TRIGGER usage_publish AFTER INSERT ON usage_records BEGIN
  UPDATE workspaces SET revision=revision+1 WHERE id=NEW.workspace_id;
@@ -142,9 +143,9 @@ WITH previous AS (
  FROM usage_records WINDOW w AS (PARTITION BY workspace_id,stream_id,counter_epoch ORDER BY occurred_at,id)
 )
 SELECT workspace_id,id,agent,provider,occurred_at,previous_at,
- CASE WHEN measurement_kind='delta' OR model=pm THEN model END AS model,
- CASE WHEN measurement_kind='cumulative' AND (pi IS NULL OR input<pi OR output<po OR cache_read<pc) THEN 1 ELSE 0 END AS incomplete,
- CASE WHEN measurement_kind='delta' THEN input WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE MAX(input-pi-(cache_read-pc),0) END AS input,
- CASE WHEN measurement_kind='delta' THEN output WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE output-po END AS output,
- CASE WHEN measurement_kind='delta' THEN cache_read WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE cache_read-pc END AS cache_read,
+ (CASE WHEN measurement_kind='delta' OR model=pm THEN model END) AS model,
+ (CASE WHEN measurement_kind='cumulative' AND (pi IS NULL OR input<pi OR output<po OR cache_read<pc) THEN 1 ELSE 0 END) AS incomplete,
+ (CASE WHEN measurement_kind='delta' THEN input WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE MAX(input-pi-(cache_read-pc),0) END) AS input,
+ (CASE WHEN measurement_kind='delta' THEN output WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE output-po END) AS output,
+ (CASE WHEN measurement_kind='delta' THEN cache_read WHEN pi IS NULL OR input<pi OR output<po OR cache_read<pc THEN 0 ELSE cache_read-pc END) AS cache_read,
  cache_write_5m,cache_write_1h FROM previous;

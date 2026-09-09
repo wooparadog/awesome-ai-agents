@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ai-agents-collector",
+  "account_id": "17d6f1d776ced789fce5ab6fe247e981",
+  "workers_dev": true,
   "main": "src/index.ts",
   "compatibility_date": "2026-09-09",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "ai-agents",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "5104c85f-ece5-4bad-b122-6145081fd0b7",
       "migrations_dir": "migrations",
     },
   ],
