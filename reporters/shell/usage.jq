@@ -15,7 +15,15 @@ foreach inputs as $raw ({model:$model, records:[]};
           cache_write_1h:($u.cache_creation.ephemeral_1h_input_tokens//0)}}] else . end
   elif $agent=="codex" then
     if $line.type=="turn_context" then .model=($line.payload.model//.model)
-    elif $line.type=="event_msg" and $line.payload.type=="token_count" and $line.payload.info.total_token_usage!=null then
+    elif $mode=="responses" and $line.type=="token_usage_record" and $line.payload.response_id!=null and $line.payload.usage!=null then
+      $line.payload as $p | $p.usage as $u |
+      .records=[{agent:$agent,provider:"openai",run_id:$run,
+        native_record_id:$p.response_id,stream_id:($p.thread_id//$session),counter_epoch:"responses-v1",
+        model:(if .model=="" then null else .model end),occurred_at:$line.timestamp,measurement_kind:"delta",
+        counters:{input:([0,($u.input_tokens//0)-($u.cached_input_tokens//0)-($u.cache_write_input_tokens//0)]|max),
+          output:($u.output_tokens//0),cache_read:($u.cached_input_tokens//0),
+          cache_write_5m:($u.cache_write_input_tokens//0),cache_write_1h:0}}]
+    elif $mode!="responses" and $line.type=="event_msg" and $line.payload.type=="token_count" and $line.payload.info.total_token_usage!=null then
       $line.payload.info.total_token_usage as $u |
       .records=[{agent:$agent,provider:"openai",run_id:$run,
         native_record_id:($session+"|"+$line.timestamp+"|"+($u|tojson)),stream_id:$session,counter_epoch:"0",

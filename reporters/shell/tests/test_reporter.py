@@ -17,11 +17,14 @@ class ReporterTest(unittest.TestCase):
         self.dir = Path(self.temp.name)
         self.requests = []
         self.status = 200
+        self.usage_delay = 0
         test = self
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 test.requests.append((self.path, body))
+                if self.path == '/v1/usage':
+                    time.sleep(test.usage_delay)
                 self.send_response(test.status)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
@@ -50,7 +53,7 @@ class ReporterTest(unittest.TestCase):
         for hook in (ROOT/'hook.sh', ROOT.parents[1]/'hook.sh'):
             result=subprocess.run([str(hook),'claude','Stop'],env=self.env,input=json.dumps({'session_id':'forwarded'}),text=True,capture_output=True,check=True)
             self.assertEqual(result.stdout,'')
-            self.assertEqual(self.requests[-1][1]['events'][0]['native_session_id'],'forwarded')
+            self.assertEqual([body['events'][0] for path, body in self.requests if path == '/v1/events'][-1]['native_session_id'],'forwarded')
     def test_legacy_hook_preserves_local_transport(self):
         directory=self.dir/'local-events'
         env=dict(self.env,AI_AGENTS_CONFIG_DIR=str(self.dir/'unconfigured'),AI_AGENTS_EVENT_DIR=str(directory))
@@ -74,12 +77,12 @@ class ReporterTest(unittest.TestCase):
         before=time.monotonic()
         self.hook('Stop')
         self.assertLess(time.monotonic()-before, 2.5)
-        first=self.requests[-1][1]['events'][0]
+        first=[body['events'][0] for path, body in self.requests if path == '/v1/events'][-1]
         self.assertEqual(len(list((self.dir/'state/outbox').glob('*.json'))), 1)
         self.status=200
         (self.dir/'state/retry-at').unlink()
         self.run_reporter('flush')
-        self.assertEqual(self.requests[-1][1]['events'][0], first)
+        self.assertEqual([body['events'][0] for path, body in self.requests if path == '/v1/events'][-1], first)
         self.assertEqual(len(list((self.dir/'state/outbox').glob('*.json'))), 0)
     def test_reconcile_usage_partial_tail_and_attention(self):
         transcript=self.dir/'transcript.jsonl'
@@ -109,11 +112,84 @@ class ReporterTest(unittest.TestCase):
         self.assertEqual(records[0]['model'],'gpt-5')
         self.assertEqual(records[0]['measurement_kind'],'cumulative')
         self.assertEqual(records[0]['counters'],{'input':100,'output':5,'cache_read':20,'cache_write_5m':0,'cache_write_1h':0})
+    def test_hook_reports_fresh_presence_without_waiting_for_timer(self):
+        self.hook('UserPromptSubmit')
+        event = next(body['events'][0] for path, body in self.requests if path == '/v1/events')
+        presence = next(body for path, body in self.requests if path == '/v1/presence')
+        self.assertEqual(presence['runs'], [{key: event[key] for key in ('run_id', 'execution_id', 'sequence')}])
+        self.assertGreaterEqual(presence['observed_at'], event['observed_at'])
+        self.requests.clear()
+        self.hook('SessionEnd')
+        self.assertFalse(any(path == '/v1/presence' for path, _ in self.requests))
+
+    def test_coverage_waits_for_upload_and_slow_batches_can_complete(self):
+        transcript = self.dir/'transcript.jsonl'
+        record = {'type': 'assistant', 'timestamp': '2026-09-09T00:00:00Z', 'requestId': 'request',
+                  'message': {'id': 'msg_slow', 'model': 'claude-opus-5', 'usage': {'input_tokens': 10, 'output_tokens': 20}}}
+        copy = dict(record, timestamp='2026-09-09T00:00:00.003Z')
+        transcript.write_text(json.dumps(record)+'\n'+json.dumps(copy)+'\n')
+        self.hook('UserPromptSubmit', transcript_path=str(transcript))
+        self.status = 503
+        self.run_reporter('reconcile')
+        presence = [body for path, body in self.requests if path == '/v1/presence'][-1]
+        self.assertFalse(presence['usage'])
+        queued = list((self.dir/'state/outbox').glob('*.json'))
+        self.assertEqual(len(queued), 1)
+        self.assertEqual(len(json.loads(queued[0].read_text())['records']), 1)
+        self.status = 200
+        self.usage_delay = 2.1
+        (self.dir/'state/retry-at').unlink()
+        self.run_reporter('reconcile')
+        self.assertEqual(list((self.dir/'state/outbox').glob('*.json')), [])
+        presence = [body for path, body in self.requests if path == '/v1/presence'][-1]
+        self.assertTrue(presence['usage'])
+
+    def test_closed_probe_does_not_block_observed_transcript_coverage(self):
+        self.hook('SessionEnd')
+        self.run_reporter('reconcile')
+        self.assertTrue((self.dir/'state/usage-ready').exists())
+        self.hook('UserPromptSubmit', transcript_path=str(self.dir/'missing.jsonl'))
+        self.run_reporter('reconcile')
+        self.assertFalse((self.dir/'state/usage-ready').exists())
+
+    def test_reconcile_discovers_late_codex_transcript_and_response_usage(self):
+        self.env['CODEX_HOME'] = str(self.dir/'codex')
+        self.run_reporter('hook', 'codex', 'UserPromptSubmit', data={'session_id': 'late-session'})
+        sessions = self.dir/'codex/sessions'
+        sessions.mkdir(parents=True)
+        transcript = sessions/'rollout-late-session.jsonl'
+        context = {'type': 'turn_context', 'payload': {'model': 'gpt-6-astra'}}
+        response = {'type': 'token_usage_record', 'timestamp': '2026-09-09T06:00:00Z', 'payload': {
+            'response_id': 'resp_test', 'thread_id': 'late-session',
+            'usage': {'input_tokens': 100, 'cached_input_tokens': 20, 'cache_write_input_tokens': 10, 'output_tokens': 5}}}
+        cumulative = {'type': 'event_msg', 'timestamp': '2026-09-09T06:00:00.002Z', 'payload': {
+            'type': 'token_count', 'info': {'total_token_usage': {'input_tokens': 100, 'output_tokens': 5}}}}
+        transcript.write_text('\n'.join(json.dumps(r) for r in [context, response, cumulative])+'\n')
+        self.run_reporter('reconcile')
+        records = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['native_record_id'], 'resp_test')
+        self.assertEqual(records[0]['model'], 'gpt-6-astra')
+        self.assertEqual(records[0]['measurement_kind'], 'delta')
+        self.assertEqual(records[0]['counters'], {'input': 70, 'output': 5, 'cache_read': 20, 'cache_write_5m': 10, 'cache_write_1h': 0})
+        self.assertTrue((self.dir/'state/usage-ready').exists())
+        self.run_reporter('reconcile')
+        self.assertEqual(sum(path == '/v1/usage' for path, _ in self.requests), 1)
+        # Old installations replay once, with identical response IDs and no
+        # cumulative duplicates, even if their previous cursor was at EOF.
+        cursor = next((self.dir/'state/cursors').glob('*.json'))
+        old = json.loads(cursor.read_text())
+        del old['version']
+        cursor.write_text(json.dumps(old))
+        self.run_reporter('reconcile')
+        replay = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
+        self.assertEqual(replay, records + records)
+
     def test_switching_session_preserves_transcript_history(self):
         self.hook('SessionStart')
-        first=self.requests[-1][1]['events'][0]
+        first=[body['events'][0] for path, body in self.requests if path == '/v1/events'][-1]
         self.run_reporter('hook','claude','SessionStart',data={'session_id':'second'})
-        second=self.requests[-1][1]['events'][0]
+        second=[body['events'][0] for path, body in self.requests if path == '/v1/events'][-1]
         self.assertEqual(first['execution_id'],second['execution_id'])
         self.assertEqual(second['run_generation'],2)
         self.assertNotEqual(first['run_id'],second['run_id'])

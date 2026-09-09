@@ -23,7 +23,9 @@ Reinstalling recognizes hook entries from the old repository layout.
 
 The optional `--timer` installs and enables a systemd user timer for reconciliation.
 Without it, reporting is driven by hooks, and pending events wait for a subsequent
-hook or a manual flush. Codex may ask you to trust the updated hook configuration.
+hook or a manual flush. Hooks also send a fresh process observation when their
+agent ancestor can be identified, so new sessions need not wait for the timer to
+become verified. Codex may ask you to trust the updated hook configuration.
 
 To configure the reporter without the Python installer:
 
@@ -59,6 +61,23 @@ observed by a hook is not automatically imported. Malformed or oversized JSONL
 records are skipped with incomplete-coverage diagnostics. Unknown process identity
 is reported as unverified; transcript growth is a heuristic for clearing attention.
 Windows and macOS are not supported by this reporter yet.
+
+Scheduled and manual flushes allow ten seconds per request and stop starting new
+requests after ninety seconds. Pending batches retain their IDs for retry. Coverage
+remains incomplete until the observed transcripts are caught up and the outbox is
+acknowledged. Hook uploads retain their shorter one-second request budgets.
+
+Reconciliation retries Codex transcript discovery if the file was not available
+when the hook fired, including archived sessions. Closed runs that never supplied
+or produced a transcript (for example installation probes) do not block coverage
+of observed transcripts. A missing known transcript still marks coverage incomplete.
+
+Modern Codex `token_usage_record` entries report exact per-response usage. Response
+IDs deduplicate retries and copied transcripts, and retain the first request's
+tokens and model changes. Older transcripts still use cumulative counters with
+an unknown initial baseline. On upgrade, Codex cursors replay once automatically;
+apply collector migration `0005_codex_responses.sql` before upgrading reporters
+so response records replace legacy estimates without double counting.
 
 ## Uninstall and tests
 

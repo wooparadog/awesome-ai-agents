@@ -6,7 +6,7 @@ All application endpoints require authentication; opening the URL without a toke
 | Resource | Value |
 | --- | --- |
 | Worker | `ai-agents-collector` |
-| Deployed version | `e26f64b5-8282-46b2-996c-7071a2899f82` |
+| Deployed version | `f13c7c22-8ddc-4613-aad2-a7f70ea2dc5c` |
 | Initial deployment | 2026-09-09, 05:22 UTC |
 | D1 database | `ai-agents` |
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
@@ -66,6 +66,20 @@ pnpm exec wrangler d1 execute ai-agents --remote \
 The first remote migration exposed a parsing difference between local execution and D1's remote SQL endpoint.
 Migration `0001.sql` now parenthesizes `CASE` expressions to keep trigger bodies intact.
 All four migrations applied successfully; the collector tests include a regression check for swallowed DDL statements.
+
+On September 9, migrations `0005_codex_responses.sql`, `0006_astra_prices.sql`,
+`0007_claude_usage_duplicates.sql`, and `0008_codex_response_cutover.sql` were also applied remotely. They recover exact
+Codex response accounting, add published Astra API estimates, and tolerate repeated
+Claude content-block timestamps without double counting. Updated reporters are
+installed on Desktop, `yoga-arch`, and `karry`. The Worker now checks each distinct
+run's ownership once per usage request, avoiding repeated database round trips
+for batches from the same transcript. Earlier cumulative history is retained when
+a thread spans an upgrade to per-response records.
+
+Live verification on `yoga-arch` confirmed the running AwesomeWM widget receives
+three live sessions, zero stale/unverified sessions, complete usage coverage, and
+priced totals for both agents. All three reporter outboxes and quarantine queues
+were empty; recovered Claude warning markers were archived after acknowledgement.
 
 ## Verification
 

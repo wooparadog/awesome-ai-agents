@@ -7,7 +7,7 @@ import {
 } from "cloudflare:test";
 import { beforeAll, expect, it } from "vitest";
 import { hash } from "../src/protocol";
-import { dayBounds } from "../src/snapshot";
+import { dayBounds, summarize, usageQuery } from "../src/snapshot";
 import { publishPending } from "../src/subscriptions";
 declare const TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
 const secret = "a".repeat(43),
@@ -250,6 +250,182 @@ it("handles local day boundaries including daylight saving", () => {
   expect(dayBounds(now, "America/New_York")).toEqual([
     Date.parse("2026-03-08T05:00:00Z"),
     Date.parse("2026-03-09T04:00:00Z"),
+  ]);
+});
+it("checks every run in a usage batch and keeps ownership checks scoped to the request", async () => {
+  const own = event(),
+    foreign = event({ installation_id: "m2" });
+  await send([own]);
+  await send([foreign], "m2");
+  const record = (run_id: string, suffix: string) => ({
+    run_id,
+    agent: "claude",
+    provider: "anthropic",
+    native_record_id: `${own.run_id}-${suffix}`,
+    stream_id: own.run_id,
+    measurement_kind: "delta",
+    model: "claude-opus-5",
+    occurred_at: Date.now(),
+    counters: { input: 10, output: 1 },
+  });
+  const records = [record(own.run_id, "a"), record(own.run_id, "b")];
+  expect(
+    (
+      await request("/v1/usage", "m1", {
+        schema_version: 1,
+        records: [...records, record(foreign.run_id, "foreign")],
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM usage_records WHERE workspace_id=? AND stream_id=?",
+      )
+        .bind(workspace, own.run_id)
+        .first<{ n: number }>()
+    )?.n,
+  ).toBe(0);
+  expect(
+    (await request("/v1/usage", "m1", { schema_version: 1, records })).status,
+  ).toBe(200);
+  expect(
+    (await request("/v1/usage", "m2", { schema_version: 1, records })).status,
+  ).toBe(409);
+});
+it("deduplicates Claude content blocks with different timestamps but rejects changed counters", async () => {
+  const e = event();
+  await send([e]);
+  const record = {
+    run_id: e.run_id,
+    agent: "claude",
+    provider: "anthropic",
+    native_record_id: `${e.run_id}-message|request`,
+    stream_id: `${e.run_id}-message|request`,
+    counter_epoch: "0",
+    model: "claude-fable-5-1",
+    measurement_kind: "delta",
+    occurred_at: Date.now() - 1000,
+    counters: { input: 100, output: 5 },
+  };
+  const copy = { ...record, occurred_at: record.occurred_at + 3 };
+  expect(
+    (
+      await request("/v1/usage", "m1", {
+        schema_version: 1,
+        records: [record, copy],
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await request("/v1/usage", "m1", { schema_version: 1, records: [copy] }))
+      .status,
+  ).toBe(200);
+  expect(
+    (
+      await request("/v1/usage", "m1", {
+        schema_version: 1,
+        records: [{ ...copy, counters: { input: 101, output: 5 } }],
+      })
+    ).status,
+  ).toBe(409);
+  const rows = await env.DB.prepare(
+    "SELECT occurred_at,input,output FROM usage_records WHERE workspace_id=? AND stream_id=?",
+  )
+    .bind(workspace, record.stream_id)
+    .all();
+  expect(rows.results).toEqual([
+    { occurred_at: record.occurred_at, input: 100, output: 5 },
+  ]);
+});
+it("replaces legacy Codex estimates with deduplicated response usage and prices Astra", async () => {
+  const e = event({ agent: "codex" });
+  await send([e]);
+  const time = Date.now();
+  const base = {
+    run_id: e.run_id,
+    agent: "codex",
+    provider: "openai",
+    stream_id: e.run_id,
+    counter_epoch: "0",
+    model: "gpt-6-astra",
+    measurement_kind: "cumulative",
+    counters: { input: 100, output: 5, cache_read: 20 },
+  };
+  const legacy = [0, 1].map((i) => ({
+    ...base,
+    native_record_id: `${e.run_id}-legacy-${i}`,
+    occurred_at: time + i * 1000,
+    counters: { input: 100 + i * 100, output: 5 + i * 5, cache_read: 20 },
+  }));
+  const responses = [0, 1].map((i) => ({
+    ...base,
+    native_record_id: `${e.run_id}-response-${i}`,
+    counter_epoch: "responses-v1",
+    measurement_kind: "delta",
+    occurred_at: time + i * 1000 - 2,
+    counters: { input: 70, output: 5, cache_read: 20, cache_write_5m: 10 },
+  }));
+  for (const records of [legacy, responses, responses]) {
+    expect(
+      (await request("/v1/usage", "m1", { schema_version: 1, records })).status,
+    ).toBe(200);
+  }
+  const rows = await env.DB.prepare(usageQuery)
+    .bind(workspace, time - 2, time + 1001)
+    .all();
+  const ids = await Promise.all(
+    responses.map((r) =>
+      hash(JSON.stringify([r.provider, r.native_record_id])),
+    ),
+  );
+  const own = rows.results.filter((r) => ids.includes(String(r.id)));
+  expect(own).toHaveLength(2);
+  const legacyIds = await Promise.all(
+    legacy.map((r) => hash(JSON.stringify([r.provider, r.native_record_id]))),
+  );
+  expect(rows.results.some((r) => legacyIds.includes(String(r.id)))).toBe(
+    false,
+  );
+  const totals = summarize(own).codex;
+  expect(totals.tokens).toBe(210);
+  expect(totals.complete).toBe(true);
+  expect(totals.priced).toBe(true);
+  expect(totals.dollars).toBeCloseTo(0.00219);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM usage_records WHERE workspace_id=? AND stream_id=?",
+      )
+        .bind(workspace, e.run_id)
+        .first<{ n: number }>()
+    )?.n,
+  ).toBe(4);
+  const older = legacy.map((r, i) => ({
+    ...r,
+    native_record_id: `${e.run_id}-older-${i}`,
+    occurred_at: time - 3000 + i * 1000,
+    counters: { input: 10 + i * 10, output: 0, cache_read: 0 },
+  }));
+  expect(
+    (await request("/v1/usage", "m1", { schema_version: 1, records: older }))
+      .status,
+  ).toBe(200);
+  const prefix = await env.DB.prepare(
+    "SELECT input,incomplete FROM usage_deltas WHERE workspace_id=? AND id IN (?,?) ORDER BY occurred_at",
+  )
+    .bind(
+      workspace,
+      ...(await Promise.all(
+        older.map((r) =>
+          hash(JSON.stringify([r.provider, r.native_record_id])),
+        ),
+      )),
+    )
+    .all();
+  expect(prefix.results).toEqual([
+    { input: 0, incomplete: 1 },
+    { input: 10, incomplete: 0 },
   ]);
 });
 it("broadcasts revisions and restores socket attachments after hibernation", async () => {
