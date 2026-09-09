@@ -45,7 +45,7 @@ reporters/shell/reporter.sh reconcile
 
 `flush` retries queued events. `reconcile` also observes known processes, detects
 transcript activity that can clear attention, and extracts usage metadata. Run it
-every 30 seconds through the supplied timer or a scheduler of your choice.
+no more often than every five minutes through the supplied timer or a scheduler of your choice.
 
 Configuration and private credentials live in `${XDG_CONFIG_HOME:-$HOME/.config}/ai-agents`;
 durable outbox, process identities, and transcript cursors live in

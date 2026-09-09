@@ -395,3 +395,44 @@ it("keeps migration DDL separate for D1's remote SQL splitter", () => {
     }
   }
 });
+
+it("keeps presence live between five-minute checks and expires it after ten minutes", async () => {
+  const e = event();
+  await send([e]);
+  const lastSeen = Date.now() - 6 * 60 * 1000;
+  await env.DB.prepare(
+    "UPDATE session_runs SET presence_received_at=?,last_alive_observed_at=? WHERE workspace_id=? AND id=?",
+  )
+    .bind(lastSeen, lastSeen, workspace, e.run_id)
+    .run();
+  await env.DB.prepare(
+    "UPDATE installations SET last_contact_at=?,capabilities_json=? WHERE workspace_id=?",
+  )
+    .bind(lastSeen, JSON.stringify({ usage: true, dropped: 0 }), workspace)
+    .run();
+  type Snapshot = {
+    agents: Record<string, { id: string; freshness: string }[]>;
+    usage_complete: boolean;
+  };
+  const fresh = await (await request("/v1/snapshot")).json<Snapshot>();
+  expect(fresh.agents.claude.find((r) => r.id === e.run_id)?.freshness).toBe(
+    "live",
+  );
+  expect(fresh.usage_complete).toBe(true);
+  const expired = Date.now() - 10 * 60 * 1000 - 1;
+  await env.DB.prepare(
+    "UPDATE session_runs SET presence_received_at=?,last_alive_observed_at=? WHERE workspace_id=? AND id=?",
+  )
+    .bind(expired, expired, workspace, e.run_id)
+    .run();
+  await env.DB.prepare(
+    "UPDATE installations SET last_contact_at=? WHERE workspace_id=? AND id='m1'",
+  )
+    .bind(expired, workspace)
+    .run();
+  const stale = await (await request("/v1/snapshot")).json<Snapshot>();
+  expect(stale.agents.claude.find((r) => r.id === e.run_id)?.freshness).toBe(
+    "stale",
+  );
+  expect(stale.usage_complete).toBe(false);
+});

@@ -50,6 +50,9 @@ The [shell reporter guide](../reporters/shell/README.md) covers hook installatio
 and scheduling. The [AwesomeWM guide](../clients/awesomewm/README.md) covers the
 currently available viewer.
 
+Reporters reconcile at five-minute intervals; the collector allows a ten-minute
+freshness window so healthy sessions remain live between reports.
+
 Future Windows and macOS clients use the same [public protocol](../docs/client-protocol.md).
 They do not need to copy the AwesomeWM implementation or the Linux process helpers.
 

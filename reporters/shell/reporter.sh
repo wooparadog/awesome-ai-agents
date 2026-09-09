@@ -18,7 +18,7 @@ case ${1:-help} in
     printf '%s' "$token" | jq -Rse 'test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{40,100}$")' >/dev/null || error 'invalid token'
     printf '%s\n' "$token" | atomic "$CONFIG/write.token"
     jq -n --arg url "${2%/}" --arg installation "$3" '{url:$url,installation_id:$installation}' | atomic "$CONFIG/config.json"
-    printf 'Configured installation %s. Schedule reporter.sh reconcile every 30 seconds.\n' "$3"
+    printf 'Configured installation %s. Schedule reporter.sh reconcile every 5 minutes.\n' "$3"
     exit 0 ;;
   help) printf '%s\n' 'reporter.sh init URL INSTALLATION_ID TOKEN_FILE | hook AGENT EVENT | flush | reconcile | status'; exit 0 ;;
 esac

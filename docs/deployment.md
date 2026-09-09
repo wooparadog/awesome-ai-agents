@@ -6,13 +6,15 @@ All application endpoints require authentication; opening the URL without a toke
 | Resource | Value |
 | --- | --- |
 | Worker | `ai-agents-collector` |
-| Deployed version | `4101d592-9df8-4a41-85f3-ab0fdc12ae39` |
+| Deployed version | `e26f64b5-8282-46b2-996c-7071a2899f82` |
 | Initial deployment | 2026-09-09, 05:22 UTC |
 | D1 database | `ai-agents` |
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
 | Database region | APAC |
 | Subscription class | `Subscriptions`, SQLite-backed, hibernating WebSockets |
 | Maintenance schedule | Every minute |
+| Machine reconciliation | At least five minutes between runs |
+| Presence freshness | Ten minutes |
 | Workspace | `personal` |
 | Initial reporter installation | `desktop` |
 

@@ -1,3 +1,6 @@
+// Allow two five-minute reconciliation intervals before marking a reporter stale.
+const PRESENCE_TTL_MS = 10 * 60 * 1000;
+
 import { HttpError } from "./protocol";
 export function dayBounds(now: number, timezone: string): [number, number] {
   const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -170,8 +173,8 @@ export async function snapshot(
       r.presence_received_at == null
         ? null
         : Math.min(
-            Number(r.presence_received_at) + 120000,
-            Number(r.last_alive_observed_at) + 120000,
+            Number(r.presence_received_at) + PRESENCE_TTL_MS,
+            Number(r.last_alive_observed_at) + PRESENCE_TTL_MS,
           );
     const freshness =
       expiry == null ? "unverified" : expiry <= now ? "stale" : "live";
@@ -207,7 +210,7 @@ export async function snapshot(
       (i) =>
         i.capabilities.usage === true &&
         !i.capabilities.dropped &&
-        Number(i.last_contact_at) > now - 120000,
+        Number(i.last_contact_at) > now - PRESENCE_TTL_MS,
     );
   for (const c of Object.values(cost)) c.complete = c.complete && complete;
   return {

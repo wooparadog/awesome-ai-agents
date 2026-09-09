@@ -61,6 +61,10 @@ Run entries include `id`, `session_id`, `execution_id`, `installation_id`, `agen
 path describes the reporting installation and must never be interpreted as a
 process or path on the viewing machine.
 
+Reporters reconcile no more often than every five minutes by default. The collector
+allows ten minutes of presence freshness before marking a run stale. This lease
+is separate from the two-minute maximum age accepted for a newly submitted presence observation.
+
 Activity states are `unknown`, `idle`, `busy`, `asking`, `done`, and `ended`.
 Snapshot runs are current; ended runs are available in history. Freshness is a
 separate value: `live`, `stale`, or `unverified`. Lack of recent activity does not
