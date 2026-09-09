@@ -1,3 +1,9 @@
 # Editor / OS noise
 *~
 .DS_Store
+node_modules/
+.wrangler/
+.dev.vars*
+coverage/
+__pycache__/
+*.token

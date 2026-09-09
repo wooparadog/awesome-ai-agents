@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-agents-collector",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "traces": { "enabled": true } },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ai-agents",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "SUBSCRIPTIONS", "class_name": "Subscriptions" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Subscriptions"] }],
+  "triggers": { "crons": ["* * * * *"] },
+}

@@ -1,0 +1,22 @@
+{
+  "name": "ai-agents-collector",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "migrate:local": "wrangler d1 migrations apply DB --local",
+    "provision": "node scripts/provision.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.1.5",
+    "@types/node": "^26.5.0",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.129.1"
+  },
+  "packageManager": "pnpm@11.3.0"
+}

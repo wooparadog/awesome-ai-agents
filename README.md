@@ -1,182 +1,82 @@
-# awesome-ai-agents
+# AI Agent Collector
 
-An AwesomeWM wibar indicator for **Claude Code** and **Codex** sessions: how many
-are running, how many are blocked waiting on you, and what today's tokens cost.
+Collect coding-agent activity across machines and make it available to any client.
+Track running sessions, agents waiting for attention, and token usage in one place.
 
-![The indicator in a wibar, with its hover popup open](doc/screenshot.png)
+The collector runs on **Cloudflare Workers + D1**, with **hibernating WebSockets**
+for change notifications. Agent hooks report through a small shell reporter.
+**AwesomeWM is the first viewer client**; the same API can support Windows tray
+apps, macOS menu-bar apps, and other interfaces.
 
-```
-󰚩 3          three sessions, all working
-󰚩 3 ?1       one is asking you something          (red)
-󰚩 3 ✓2       two finished a turn, awaiting input  (green)
-```
-
-Hovering opens a per-agent breakdown; right-clicking forces a rescan.
-
-```
-AI agents
-claude code  3 sessions
- ? toki-web/master    needs you   claude-opus-5   25.9M
- ✓ dash               done        claude-opus-5    7.6M
- · notes              idle        claude-opus-5     77k
-   today  69.6M tokens · $58.75
-
-codex  1 session
- ● orion              working     gpt-5.6-sol      3.7M
-   today  3.7M tokens · cost n/a · weekly limit 94%
-
-total today  $58.75
+```mermaid
+flowchart LR
+  A[Coding agents on your machines] --> R[Reporters]
+  R -->|HTTPS · write token| C[Collector]
+  C --> D[(D1)]
+  C --> S[Workspace subscriptions]
+  S -->|Hibernating WebSocket| V[Viewer clients]
+  V -->|HTTPS · read token| C
 ```
 
-## Why it costs nothing to run
+The collector owns authentication, event ordering, session state, usage accounting,
+and retention. Reporters observe agents on a machine and submit metadata. Viewer
+clients display the shared state and need no access to agent processes or transcripts.
 
-**Nothing polls.** Both CLIs support hooks, so each one reports when it starts,
-submits a prompt, blocks on a permission prompt, finishes a turn, or exits. An
-idle desktop with idle agents costs exactly zero CPU — there is no timer anywhere
-in the module.
+## Get started
 
-The flip side is that an agent which has not run a turn is not tracked, because
-it has reported nothing: see Known limits.
+1. [Run the collector and provision credentials](collector/README.md).
+2. [Install the shell reporter](reporters/shell/README.md) on each agent machine.
+3. [Connect the AwesomeWM client](clients/awesomewm/README.md), or
+   [build another client](docs/client-protocol.md).
 
-**Costs are computed incrementally.** Transcripts are append-only JSONL, so each
-file carries a byte offset and a refresh only parses the bytes appended since
-last time — a few KB per finished turn, folded in when the agent says it
-stopped, which is why hovering is instant. The cold start (a whole day of
-transcripts) runs on GLib's idle queue in bounded chunks and never blocks
-AwesomeWM's single main loop.
+Each reporter gets an installation-bound write token. Viewers use separate read
+tokens. The reporter spools events during outages, retries with stable IDs, and
+sends process observations separately from lifecycle history. Prompts, generated
+text, commands, and tool payloads stay on the source machine.
 
-Everything is pure Lua (lgi/Gio for file monitoring and directory listing), apart
-from an 8-line POSIX `hook.sh`. No `jq`, no `node`, no external cost tool.
+Clients subscribe to revision notifications and fetch snapshots when state changes.
+They recover missed notifications by fetching a fresh snapshot after reconnecting.
+Quiet sessions remain distinguishable from stale or unverified sessions; missing
+usage is shown explicitly rather than counted as zero.
 
-## Install
+## Repository layout
 
-As a submodule of your AwesomeWM config:
-
-```sh
-cd ~/.config/awesome
-git submodule add https://github.com/wooparadog/awesome-ai-agents.git lib/ai
-lib/ai/install-hooks.sh          # or --dry-run first
-```
-
-`install-hooks.sh` merges the hook entries into `~/.claude/settings.json` and
-`~/.codex/hooks.json`, backing both up and leaving every other key (and any
-hooks belonging to other tools) untouched. `--uninstall` removes exactly what it
-added.
-
-> **Codex requires trusting hooks once.** They stay inert until you accept the
-> prompt its TUI shows when it notices a new or changed `hooks.json`. Editing
-> that file later invalidates the stored trust hash and re-prompts.
-
-Then in your theme:
-
-```lua
-local ai_agents = require("lib.ai")
-
-local ai = ai_agents({
-  settings = function(state, widget)
-    local text = "󰚩 " .. state.total
-    if state.asking > 0 then text = text .. " ?" .. state.asking end
-    if state.done > 0 then text = text .. " ✓" .. state.done end
-    widget:set_markup(text)
-  end,
-})
-
--- ai.widget goes in your wibar
-```
-
-### Arguments
-
-| argument | default | meaning |
-| --- | --- | --- |
-| `settings(state, widget)` | — | render callback, see below |
-| `widget` | a new textbox | the widget to drive |
-| `colors` | red/green/grey | `{ asking, done, dim }`, used in the popup |
-| `notification_preset` | — | naughty preset for the hover popup |
-| `claude_projects` | `~/.claude/projects` | Claude transcript root |
-| `codex_sessions` | `~/.codex/sessions` | Codex rollout root |
-| `cache_path` | `$XDG_CACHE_HOME/awesome/ai-agents.json` | offset/usage cache |
-| `event_dir` | `$XDG_RUNTIME_DIR/ai-agents` | must match `hook.sh` (`AI_AGENTS_EVENT_DIR`) |
-
-`state` carries `total`, `busy`, `asking`, `done`, `order` (agent names),
-`agents` (grouped session lists) and `cost` (today's per-agent totals). Each
-session has `agent`, `state`, `cwd`, `model`, `pid` and `transcript`.
-
-The returned handle exposes `widget`, `state`, `update()`, `show_popup()` and
-`hide_popup()`. `sessions.log()` returns the last 64 events applied, which is the
-first thing to look at when a state looks wrong.
-
-## How it works
-
-| file | role |
+| Directory | Responsibility |
 | --- | --- |
-| `hook.sh` | writes each hook payload to `$XDG_RUNTIME_DIR/ai-agents/<agent>.<Event>.<pid>.<nanos>.json` |
-| `sessions.lua` | Gio directory monitor; live session table and state machine |
-| `cost.lua` | incremental transcript accounting, persisted byte offsets |
-| `pricing.lua` | per-model prices |
-| `util.lua` | Gio directory listing and `/proc` helpers |
-| `init.lua` | the widget: markup, popup, click-to-focus |
+| [`collector/`](collector/) | Worker, D1 migrations, authentication, accounting, WebSocket subscriptions, provisioning, server tests |
+| [`reporters/`](reporters/README.md) | Agent integrations that submit observations; currently the Linux shell reporter |
+| [`clients/`](clients/README.md) | Interfaces that consume the collector; currently AwesomeWM |
+| [`docs/`](docs/) | Architecture, public client protocol, and migration guide |
+| [`scripts/`](scripts/) | Repository-wide local checks |
 
-`hook.sh` never builds JSON — the agent name, event and pid ride in the
-*filename*, so the payload passes through byte-for-byte. Writes go to
-`$XDG_RUNTIME_DIR` (tmpfs): no disk wear, and no stale state survives a reboot.
+The collector can be developed and run without installing AwesomeWM, Lua, or the
+shell reporter. Client-specific dependencies and tests live with their client.
+The existing repository URL remains unchanged.
 
-Session states: `idle` (open, nothing said yet) → `busy` (working) → `asking`
-(blocked on a permission prompt or question) → `done` (turn finished, awaiting
-your next prompt).
+## Platform support
 
-Several things make that tracking hold up in practice:
+| Component | Available now | Future extensions |
+| --- | --- | --- |
+| Collector | Cloudflare Workers; local development through Wrangler | More consumers of the existing API |
+| Agent reporter | Linux shell; Claude Code and Codex hooks | Native Windows/macOS reporters and other agent adapters |
+| Viewer | AwesomeWM on Linux | Windows tray and macOS menu-bar clients |
 
-- **Liveness.** A `kill -9`'d agent never fires `SessionEnd`, so every read of the
-  session list first reaps sessions whose pid has left `/proc`, with a `comm`
-  check to survive pid reuse.
-- **Compaction.** Claude Code fires `SessionStart` with `source: "compact"` in the
-  *middle* of a turn. Treating that like a new session would report a busy agent
-  as idle for the rest of the turn, so it's ignored.
-- **Unrecognised notifications.** `Notification` covers both "needs your
-  permission" and "waiting for your input". Anything else it might say leaves the
-  state untouched — guessing would clear a working agent's badge.
-- **One session per process.** A new session on a pid retires whatever was there
-  before, so `/clear` and `/resume` don't leave superseded sessions behind
-  inflating the count.
-- **Clearing `asking`.** Nothing reports that *you answered*. While a session is
-  blocked, its transcript is watched: the agent writes again the moment it is
-  unblocked, which clears the badge instead of leaving it stuck until the turn
-  ends.
+Windows and macOS clients are not implemented yet. A future viewer on either OS
+can monitor agents reported from Linux machines; observing agents running natively
+on those operating systems also requires a compatible reporter. The protocol keeps
+those two roles independent.
 
-`PreToolUse` / `PostToolUse` are deliberately not registered: they fire hundreds
-of times per turn and add no signal.
+## Development and migration
 
-### Cost accounting
+Install the collector dependencies with `cd collector && pnpm install --frozen-lockfile`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for component boundaries and checks, and
+[docs/architecture.md](docs/architecture.md) for the collector design.
 
-Claude transcripts record per-message `usage` (input, output, 5m/1h cache writes,
-cache reads) plus the model, which are priced from `pricing.lua`. Assistant
-messages are deduplicated **globally**, not per file — a forked or resumed
-session copies its parent's history into a new transcript, which otherwise
-overcounts by ~10%. This matches [ccusage](https://github.com/ccusage/ccusage).
-
-Codex logs *cumulative* totals per turn, so a day costs the difference between
-its last snapshot and the last one taken before the day began. Its rollouts also
-carry the plan's rate-limit percentage, which the popup shows.
-
-Totals were validated against an independent `jq` implementation over real
-transcripts — 69,233,739 tokens / $58.4294 across a day, matching exactly.
-
-## Known limits
-
-- **An agent that has not run a turn yet is invisible.** Nothing reports it:
-  Codex creates its session — and its rollout file — only when the first prompt
-  is submitted, so a freshly opened TUI is unknown to hooks and to the filesystem
-  alike. It appears as soon as it does anything.
-- Likewise, a session already running when the hooks were installed stays
-  invisible until its next turn fires one.
-- Agents running elsewhere (ssh, a container) are not tracked.
-- Prices are hand-maintained. An unknown model is not an error: its tokens are
-  still counted, it is left out of the dollar figure, and the total is marked
-  `+`. Codex's `gpt-5.6-sol` is currently unpriced.
-- Costs cover **today** only (local midnight) and are estimates: they price the
-  tokens the transcripts record, with no visibility into subscription billing.
-- Linux only — liveness and click-to-focus read `/proc`.
+Existing `require("lib.ai")`, root `hook.sh`, and root `install-hooks.sh` entry
+points remain as compatibility forwarders. New installations should use the
+component paths above. See the [migration guide](docs/migration.md) for existing
+widget configurations and reconciliation timers.
 
 ## License
 
-MIT. Vendors `dkjson.lua` (MIT, David Heiko Kolf).
+MIT. The AwesomeWM client vendors `dkjson.lua` under its original MIT license.

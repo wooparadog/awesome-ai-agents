@@ -1,0 +1,2 @@
+# Preserve the upstream formatting of the vendored JSON library.
+clients/awesomewm/dkjson.lua

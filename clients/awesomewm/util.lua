@@ -12,11 +12,9 @@ local util = {}
 function util.list_dir(path)
   local out = {}
   local ok, enum = pcall(function()
-    return Gio.File.new_for_path(path):enumerate_children(
-      "standard::name,standard::type,time::modified",
-      Gio.FileQueryInfoFlags.NONE,
-      nil
-    )
+    return Gio.File
+      .new_for_path(path)
+      :enumerate_children("standard::name,standard::type,time::modified", Gio.FileQueryInfoFlags.NONE, nil)
   end)
   if not ok or not enum then
     return out
