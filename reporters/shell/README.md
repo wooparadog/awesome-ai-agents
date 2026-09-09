@@ -74,7 +74,9 @@ of observed transcripts. A missing known transcript still marks coverage incompl
 
 Modern Codex `token_usage_record` entries report exact per-response usage. Response
 IDs deduplicate retries and copied transcripts, and retain the first request's
-tokens and model changes. Older transcripts still use cumulative counters with
+tokens and model changes. Transcript cursors are scoped to each run: resuming a
+session in a new process replays its usage for the new run without increasing
+workspace totals for records already collected. Older transcripts still use cumulative counters with
 an unknown initial baseline. On upgrade, Codex cursors replay once automatically;
 apply collector migration `0005_codex_responses.sql` before upgrading reporters
 so response records replace legacy estimates without double counting.

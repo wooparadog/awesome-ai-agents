@@ -58,6 +58,12 @@ boundaries. The handle exposes `widget`, `state`, `update()`, `show_popup()`,
 | `widget` | Existing widget; defaults to a textbox |
 | `colors` | Popup colors: `asking`, `done`, `dim` |
 | `notification_preset` | AwesomeWM notification preset |
+| `popup_max_width` | Maximum popup width in pixels; defaults to DPI-scaled 1,000 and is capped at 80% of the screen work area |
+
+The popup grows with its content up to that limit and wraps longer lines only
+when needed. Short content keeps a smaller popup. Custom notification display
+handlers should respect `notification.preset.max_width` and use a `max` width
+constraint rather than forcing a fixed width.
 
 ## Legacy local mode
 

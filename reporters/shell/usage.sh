@@ -22,7 +22,9 @@ for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
   if [ -z "$path" ] && [ "$(jq -r '.closed//false' "$run")" = true ] &&
     [ -z "$(jq -r '.transcript//empty' "$run")" ]; then continue; fi
   [ -f "$path" ] || { complete=false; continue; }
-  key=$(printf '%s' "$path" | sha256sum | cut -d ' ' -f1)
+  # Resumed executions may share a transcript. Each run must observe its usage;
+  # provider record IDs still deduplicate the workspace totals at the collector.
+  key=$(printf '%s\n%s' "$rid" "$path" | sha256sum | cut -d ' ' -f1)
   cursor="$STATE/cursors/$key.json"
   [ -f "$cursor" ] || printf '{"offset":0,"model":null}' > "$cursor"
   offset=$(jq '.offset' "$cursor"); size=$(stat -c %s "$path")

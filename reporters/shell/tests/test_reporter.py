@@ -185,6 +185,44 @@ class ReporterTest(unittest.TestCase):
         replay = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
         self.assertEqual(replay, records + records)
 
+    def test_resumed_execution_observes_shared_transcript_usage(self):
+        transcript = self.dir/'resumed.jsonl'
+        context = {'type': 'turn_context', 'payload': {'model': 'gpt-6-astra'}}
+        response = {'type': 'token_usage_record', 'timestamp': '2026-09-09T06:00:00Z', 'payload': {
+            'response_id': 'resp_before_resume', 'thread_id': 'resumed-session',
+            'usage': {'input_tokens': 100, 'cached_input_tokens': 20, 'output_tokens': 5}}}
+        transcript.write_text(json.dumps(context)+'\n'+json.dumps(response)+'\n')
+        self.run_reporter('hook', 'codex', 'UserPromptSubmit', data={
+            'session_id': 'resumed-session', 'transcript_path': str(transcript)})
+        self.run_reporter('reconcile')
+        original = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']][0]
+        runs = self.dir/'state/runs'
+        source = next(runs.glob('*.json'))
+        old = json.loads(source.read_text())
+        # Match a restarted process: the closed execution is scanned before the
+        # new execution, but both refer to the same native session and file.
+        source.unlink()
+        (runs/'00-old.json').write_text(json.dumps(dict(old, closed=True)))
+        resumed = dict(old, run_id='resumed-run', execution_id='resumed-execution')
+        (runs/'99-resumed.json').write_text(json.dumps(resumed))
+        self.requests.clear()
+        self.run_reporter('reconcile')
+        records = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
+        self.assertEqual(records, [dict(original, run_id='resumed-run')])
+        self.assertEqual(len(list((self.dir/'state/cursors').glob('*.json'))), 2)
+        with transcript.open('a') as fh:
+            later = dict(response, timestamp='2026-09-09T06:01:00Z',
+                         payload=dict(response['payload'], response_id='resp_after_resume'))
+            fh.write(json.dumps(later)+'\n')
+        self.requests.clear()
+        self.run_reporter('reconcile')
+        records = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
+        self.assertEqual({r['run_id'] for r in records}, {old['run_id'], resumed['run_id']})
+        self.assertEqual({r['native_record_id'] for r in records}, {'resp_after_resume'})
+        self.requests.clear()
+        self.run_reporter('reconcile')
+        self.assertFalse(any(path == '/v1/usage' for path, _ in self.requests))
+
     def test_switching_session_preserves_transcript_history(self):
         self.hook('SessionStart')
         first=[body['events'][0] for path, body in self.requests if path == '/v1/events'][-1]

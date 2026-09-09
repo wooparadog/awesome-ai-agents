@@ -15,6 +15,7 @@
 --   widget                   textbox to drive (one is created otherwise)
 --   colors                   { asking, done, dim } used in the popup
 --   notification_preset      naughty preset for the hover popup
+--   popup_max_width          pixel limit (default: DPI-scaled 1000, at most 80% of the screen)
 --   claude_projects          default ~/.claude/projects
 --   codex_sessions           default ~/.codex/sessions
 --   cache_path               default $XDG_CACHE_HOME/awesome/ai-agents.json
@@ -239,12 +240,18 @@ local function factory(args)
     if popup then
       return
     end
+    local popup_screen = awful.screen.focused()
+    local preset = gears.table.crush({}, args.notification_preset or {})
+    local max_width = args.popup_max_width
+      or preset.max_width
+      or require("beautiful.xresources").apply_dpi(1000, popup_screen)
+    preset.max_width = math.max(1, math.min(max_width, math.floor(popup_screen.workarea.width * 0.8)))
     popup = naughty.notify({
       title = "AI agents",
       message = popup_text(colors, ai.state),
       timeout = 0,
-      screen = awful.screen.focused(),
-      preset = args.notification_preset,
+      screen = popup_screen,
+      preset = preset,
       destroy = function()
         popup = nil
       end,
