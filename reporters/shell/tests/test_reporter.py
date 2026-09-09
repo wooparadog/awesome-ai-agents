@@ -217,7 +217,7 @@ class ReporterTest(unittest.TestCase):
         self.requests.clear()
         self.run_reporter('reconcile')
         records = [r for path, body in self.requests if path == '/v1/usage' for r in body['records']]
-        self.assertEqual({r['run_id'] for r in records}, {old['run_id'], resumed['run_id']})
+        self.assertEqual({r['run_id'] for r in records}, {resumed['run_id']})
         self.assertEqual({r['native_record_id'] for r in records}, {'resp_after_resume'})
         self.requests.clear()
         self.run_reporter('reconcile')

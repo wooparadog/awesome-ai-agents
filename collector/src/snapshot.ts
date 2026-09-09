@@ -2,27 +2,8 @@
 const PRESENCE_TTL_MS = 10 * 60 * 1000;
 
 import { HttpError } from "./protocol";
-export function dayBounds(now: number, timezone: string): [number, number] {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const key = (n: number) => fmt.format(new Date(n));
-  const today = key(now);
-  const boundary = (end: boolean) => {
-    let lo = now - 36 * 3600000,
-      hi = now + 36 * 3600000;
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      if (end ? key(mid) <= today : key(mid) < today) lo = mid;
-      else hi = mid;
-    }
-    return hi;
-  };
-  return [boundary(false), boundary(true)];
-}
+import { dayBounds } from "./reporting-day";
+export { dayBounds } from "./reporting-day";
 type Counters = {
   input: number;
   output: number;
@@ -87,14 +68,26 @@ export function summarize(rows: unknown[]) {
   }
   return result;
 }
-// Resolve prices per evidence timestamp before grouping, including effective dates.
-export const usageQuery = `SELECT u.*,(SELECT json_group_object(metric,nano_usd_per_token) FROM price_rates p
- WHERE p.provider=u.provider AND (p.model=u.model OR (substr(u.model,1,length(p.model)+1)=p.model||'-'
- AND length(u.model)=length(p.model)+9 AND substr(u.model,length(p.model)+2) NOT GLOB '*[^0-9]*')
- OR (substr(u.model,1,length(p.model)+1)=p.model||'@' AND length(u.model)>length(p.model)+1
- AND substr(u.model,length(p.model)+2) NOT GLOB '*[^0-9]*')) AND p.effective_from<=u.occurred_at AND (p.effective_to IS NULL OR p.effective_to>u.occurred_at)) AS rates
- FROM usage_deltas u JOIN usage_records original ON original.workspace_id=u.workspace_id AND original.id=u.id
- WHERE u.workspace_id=? AND u.occurred_at>=? AND u.occurred_at<? AND original.archived=0 LIMIT 10001`;
+// Materialized statistics are a bounded set of day/model/price buckets, regardless
+// of how many transcript records have been ingested. These are also benchmarked
+// directly with D1's rows_read metadata in the regression suite.
+export function statisticsQueries(
+  env: Env,
+  workspace: string,
+  from: number,
+  to: number,
+) {
+  return [
+    env.DB.prepare(
+      "SELECT * FROM usage_rollups WHERE workspace_id=? AND run_id='' AND day_start>=? AND day_start<? LIMIT 4097",
+    ).bind(workspace, from, to),
+    env.DB.prepare(
+      `SELECT c.* FROM session_runs r INDEXED BY active_run_snapshot
+      CROSS JOIN usage_rollups c ON c.workspace_id=r.workspace_id AND c.run_id=r.id
+      WHERE r.workspace_id=? AND r.ended_at IS NULL AND c.day_start>=? AND c.day_start<? LIMIT 4097`,
+    ).bind(workspace, from, to),
+  ];
+}
 export async function snapshot(
   env: Env,
   workspace: string,
@@ -102,12 +95,25 @@ export async function snapshot(
 ) {
   const now = Date.now();
   const config = await env.DB.prepare(
-    "SELECT reporting_timezone FROM workspaces WHERE id=?",
+    "SELECT reporting_timezone,(SELECT ready FROM statistics_state WHERE id=1) AS ready FROM workspaces WHERE id=?",
   )
     .bind(workspace)
-    .first<{ reporting_timezone: string }>();
+    .first<{ reporting_timezone: string; ready: number }>();
   if (!config) throw new HttpError(404, "workspace not found");
+  if (!config.ready)
+    throw new HttpError(503, "statistics migration in progress");
   const [from, to] = range || dayBounds(now, config.reporting_timezone);
+  if (
+    range &&
+    (dayBounds(from, config.reporting_timezone)[0] !== from ||
+      dayBounds(to - 1, config.reporting_timezone)[1] !== to)
+  )
+    throw new HttpError(400, "usage intervals must cover whole reporting days");
+  if (
+    to <= now - 30 * 86400000 ||
+    from < dayBounds(now - 30 * 86400000, config.reporting_timezone)[0]
+  )
+    throw new HttpError(410, "statistics are retained for 30 days");
   const data = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare("SELECT revision FROM workspaces WHERE id=?").bind(
       workspace,
@@ -116,12 +122,7 @@ export async function snapshot(
       `SELECT r.*,s.agent,s.native_session_id,i.label AS machine FROM session_runs r JOIN sessions s ON s.workspace_id=r.workspace_id AND s.id=r.session_id
       JOIN installations i ON i.workspace_id=r.workspace_id AND i.id=r.installation_id WHERE r.workspace_id=? AND r.ended_at IS NULL ORDER BY r.last_activity_at DESC LIMIT 1001`,
     ).bind(workspace),
-    env.DB.prepare(usageQuery).bind(workspace, from, to),
-    env.DB.prepare(
-      `SELECT o.usage_id,o.run_id FROM usage_observations o JOIN session_runs r ON r.workspace_id=o.workspace_id AND r.id=o.run_id
-      JOIN usage_records u ON u.workspace_id=o.workspace_id AND u.id=o.usage_id
-      WHERE o.workspace_id=? AND r.ended_at IS NULL AND u.occurred_at>=? AND u.occurred_at<? LIMIT 20001`,
-    ).bind(workspace, from, to),
+    ...statisticsQueries(env, workspace, from, to),
     env.DB.prepare(
       "SELECT id,label,last_contact_at,capabilities_json FROM installations WHERE workspace_id=? AND disabled_at IS NULL LIMIT 1001",
     ).bind(workspace),
@@ -131,18 +132,16 @@ export async function snapshot(
   ]);
   if (
     data[1].results.length > 1000 ||
-    data[2].results.length > 10000 ||
-    data[3].results.length > 20000 ||
+    data[2].results.length > 4096 ||
+    data[3].results.length > 4096 ||
     data[4].results.length > 1000
   )
     throw new HttpError(413, "snapshot too large; narrow usage interval");
   const cost: Record<string, Total> = {};
   const perRun: Record<string, Total> = {};
-  const usage = new Map<string, UsageRow>();
   for (const value of data[2].results) {
     const row = value as UsageRow & { id: string };
     add((cost[row.agent] ??= empty()), row);
-    usage.set(row.id, row);
   }
   if (data[5].results.length > 1000)
     throw new HttpError(413, "archive response too large");
@@ -156,10 +155,17 @@ export async function snapshot(
     c.complete = c.complete && !!r.complete;
     c.available = true;
   }
-  for (const o of data[3].results) {
-    const row = usage.get(String(o.usage_id));
-    if (row) add((perRun[String(o.run_id)] ??= empty()), row);
+  for (const value of data[3].results) {
+    const row = value as UsageRow & { run_id: string };
+    add((perRun[row.run_id] ??= empty()), row);
   }
+  console.info(
+    JSON.stringify({
+      event: "snapshot_read_cost",
+      rows_read: data.reduce((n, r) => n + r.meta.rows_read, 0),
+      statistics_buckets: data[2].results.length + data[3].results.length,
+    }),
+  );
   const agents: Record<string, Record<string, unknown>[]> = {};
   let total = 0,
     busy = 0,
@@ -192,7 +198,10 @@ export async function snapshot(
       ...r,
       freshness,
       presence_expires_at: expiry,
-      usage: perRun[String(r.id)] || empty(),
+      usage: {
+        ...(perRun[String(r.id)] || empty()),
+        model: r.usage_model || r.model || null,
+      },
     });
   }
   const installations = data[4].results.map((r) => ({

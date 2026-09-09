@@ -93,3 +93,9 @@ Uninstall removes registered hooks and, with `--timer`, the scheduler. It preser
 credentials and pending data. The old root `install-hooks.sh` remains a compatibility
 entry point for previous installations, including AwesomeWM's local mode; new
 collector installations use the component installer above.
+
+Closed executions finish one complete transcript scan and then stop reading new
+content from that path. A resumed execution has its own cursor and remains active.
+Closed local run records older than seven days are outside the cloud evidence
+window. The collector acknowledges older usage without storing it; full transcript
+history remains local, while cloud daily summaries last 30 days.

@@ -3,6 +3,7 @@
   "name": "ai-agents-collector",
   "account_id": "17d6f1d776ced789fce5ab6fe247e981",
   "workers_dev": true,
+  "routes": [{ "pattern": "ai.wooparadog.info", "custom_domain": true }],
   "main": "src/index.ts",
   "compatibility_date": "2026-09-09",
   "compatibility_flags": ["nodejs_compat"],
@@ -19,5 +20,5 @@
     "bindings": [{ "name": "SUBSCRIPTIONS", "class_name": "Subscriptions" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Subscriptions"] }],
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": ["*/5 * * * *"] },
 }

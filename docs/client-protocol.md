@@ -33,7 +33,7 @@ limited to 600 HTTP requests per minute; honor `Retry-After` on 429 responses.
 | `GET /v1/snapshot` | Current runs, state counts, usage totals, workspace revision, and freshness deadlines |
 | `GET /v1/sessions?cursor=...&installation=...` | Paginated run history; up to 100 entries and a nullable next cursor |
 | `GET /v1/sessions/:run_id/events?cursor=...` | Up to 100 diagnostic lifecycle events and a nullable next cursor |
-| `GET /v1/usage?from=ISO&to=ISO` | Usage for an explicit interval of up to 31 days |
+| `GET /v1/usage?from=ISO&to=ISO` | Daily usage for whole reporting days within the last 30 days |
 | `GET /v1/subscribe` | WebSocket upgrade for change notifications |
 
 Treat cursor values as opaque. The historical `/sessions` API returns **runs**;
@@ -78,11 +78,13 @@ dollar totals can be partial estimates. Use the server's totals, which account f
 copied transcripts and cumulative counters; summing run totals can double-count
 shared evidence. Treat agent names and model IDs as extensible strings.
 
-Snapshots have explicit size limits: currently 1,000 current runs/installations,
-10,000 raw usage records in the interval, and bounded observation/archive rows.
+Snapshots have explicit size limits: currently 1,000 current runs/installations
+and 4,096 compact statistics buckets per query. Detailed usage volume does not
+increase snapshot read cost.
 An oversized response returns 413 rather than a silently truncated live count.
 Use paginated history or narrower usage intervals as appropriate and surface the
-limitation to the user. Archived usage queries must cover whole reporting days.
+limitation to the user. All usage intervals must cover whole reporting days;
+statistics are available for 30 days.
 
 ## WebSocket subscription lifecycle
 
@@ -202,6 +204,11 @@ both cached reads and cache writes, which have their own counters.
 
 Successful event/usage responses contain an `accepted` array of event IDs or native
 usage record IDs, respectively. Remove outbox items only after acknowledgement.
+Usage records older than seven days also appear in `ignored`: they are acknowledged
+without storing or recounting them after the detailed deduplication window. Daily
+statistics already collected remain available for 30 days. Lifecycle events retain
+the seven-day retry horizon.
+
 Identical retries are safe; identity reuse with different content returns 409.
 Claude content blocks can repeat the same message/request usage with different
 local timestamps. If all other accounting fields match, the first accepted
@@ -213,7 +220,9 @@ again. Changed models or counters still return 409.
 Errors use `{"error":"description","request_id":"..."}`. Important statuses:
 400 invalid payload/version; 401 invalid credential; 403 wrong scope/installation;
 409 conflicting identity or a usage run not yet ingested; 410 expired retry/history
-window; 413 size limit; 415 content type; 429 rate limit; 500 collector failure.
+window; 413 size limit; 415 content type; 429 rate limit; 503 database quota or
+statistics migration in progress; 500 collector failure. Quota errors include a
+`Retry-After` delay until the next UTC daily reset; other temporary 503s use 60 seconds.
 Retry network errors, 429, and server failures with backoff. Handle permanent payload
 errors and conflicts explicitly; do not repeatedly block unrelated observations.
 

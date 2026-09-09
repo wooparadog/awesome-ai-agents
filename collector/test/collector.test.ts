@@ -1,3 +1,4 @@
+import { usageQuery } from "./legacy-query";
 import { env, exports } from "cloudflare:workers";
 import {
   applyD1Migrations,
@@ -7,7 +8,7 @@ import {
 } from "cloudflare:test";
 import { beforeAll, expect, it } from "vitest";
 import { hash } from "../src/protocol";
-import { dayBounds, summarize, usageQuery } from "../src/snapshot";
+import { dayBounds, summarize } from "../src/snapshot";
 import { publishPending } from "../src/subscriptions";
 declare const TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
 const secret = "a".repeat(43),
@@ -500,11 +501,11 @@ it("recovers durable pending notifications and coalesces an unacknowledged subsc
   ws.close();
 });
 
-it("archives old usage without deleting the baseline for recent cumulative totals", async () => {
+it("prunes detailed usage while retaining compact totals and a cumulative baseline", async () => {
   const { retain } = await import("../src/retention");
   const w = "archive",
     now = Date.now(),
-    old = now - 100 * 86400000;
+    old = now - 10 * 86400000;
   await env.DB.prepare(
     "INSERT INTO workspaces(id,name,created_at) VALUES(?,?,?)",
   )
@@ -522,14 +523,24 @@ it("archives old usage without deleting the baseline for recent cumulative total
   ] as const) {
     await env.DB.prepare(
       `INSERT INTO usage_records(workspace_id,id,installation_id,agent,provider,native_record_id,stream_id,counter_epoch,
-      model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash)
-      VALUES(?,?,?,'codex','openai',?,'stream','0','unknown',?,?,'cumulative',?,0,0,0,0,?)`,
+      model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end)
+      VALUES(?,?,?,'codex','openai',?,'stream','0','unknown',?,?,'cumulative',?,0,0,0,0,?,?,?)`,
     )
-      .bind(w, id, "a", id, time, time, input, id)
+      .bind(
+        w,
+        id,
+        "a",
+        id,
+        time,
+        time,
+        input,
+        id,
+        ...dayBounds(time, "Asia/Singapore"),
+      )
       .run();
   }
-  await retain(env);
-  await retain(env);
+  await retain(env, now);
+  await retain(env, now + 3600000);
   const current = await env.DB.prepare(
     "SELECT input,incomplete FROM usage_deltas WHERE workspace_id=? AND id=?",
   )
@@ -537,9 +548,9 @@ it("archives old usage without deleting the baseline for recent cumulative total
     .first();
   expect(current).toEqual({ input: 100, incomplete: 0 });
   const total = await env.DB.prepare(
-    "SELECT SUM(tokens) AS tokens FROM usage_daily WHERE workspace_id=?",
+    "SELECT SUM(input+output+cache_read+cache_write_5m+cache_write_1h) AS tokens FROM usage_rollups WHERE workspace_id=? AND run_id='' AND day_start<?",
   )
-    .bind(w)
+    .bind(w, now - 7 * 86400000)
     .first();
   expect(total).toEqual({ tokens: 100 });
   expect(

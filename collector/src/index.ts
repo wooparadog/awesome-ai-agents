@@ -93,13 +93,22 @@ export default {
       }
       throw new HttpError(404, "not found");
     } catch (error) {
+      const quota =
+        error instanceof Error &&
+        /exceeded D1's free tier daily/i.test(error.message);
       const conflict =
         error instanceof Error &&
         /(?:event|execution|run|usage) conflict/.test(error.message);
-      const status =
-        error instanceof HttpError ? error.status : conflict ? 409 : 500;
-      const message =
-        error instanceof HttpError
+      const status = quota
+        ? 503
+        : error instanceof HttpError
+          ? error.status
+          : conflict
+            ? 409
+            : 500;
+      const message = quota
+        ? "database daily quota exhausted"
+        : error instanceof HttpError
           ? error.message
           : conflict
             ? "identity or payload conflict"
@@ -111,7 +120,13 @@ export default {
         { error: message, request_id: requestId },
         status,
       );
-      if (status === 429) result.headers.set("Retry-After", "60");
+      if (quota)
+        result.headers.set(
+          "Retry-After",
+          String(Math.ceil((86400000 - (Date.now() % 86400000)) / 1000)),
+        );
+      else if (status === 429 || status === 503)
+        result.headers.set("Retry-After", "60");
       return result;
     }
   },

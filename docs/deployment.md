@@ -1,18 +1,20 @@
 # Hosted deployment
 
-The collector is live at [ai-agents-collector.stdimg.workers.dev](https://ai-agents-collector.stdimg.workers.dev).
+The collector uses [ai.wooparadog.info](https://ai.wooparadog.info), with
+[ai-agents-collector.stdimg.workers.dev](https://ai-agents-collector.stdimg.workers.dev) as an alias.
 All application endpoints require authentication; opening the URL without a token returns 401.
 
 | Resource | Value |
 | --- | --- |
 | Worker | `ai-agents-collector` |
-| Deployed version | `f13c7c22-8ddc-4613-aad2-a7f70ea2dc5c` |
+| Deployed version | `39d15271-d036-42e4-a880-52dd198f0b71` |
 | Initial deployment | 2026-09-09, 05:22 UTC |
 | D1 database | `ai-agents` |
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
 | Database region | APAC |
 | Subscription class | `Subscriptions`, SQLite-backed, hibernating WebSockets |
-| Maintenance schedule | Every minute |
+| Notification retry schedule | Every five minutes |
+| Retention work | At most hourly, bounded indexed batches |
 | Machine reconciliation | At least five minutes between runs |
 | Presence freshness | Ten minutes |
 | Workspace | `personal` |
@@ -20,6 +22,40 @@ All application endpoints require authentication; opening the URL without a toke
 
 The account and database identifiers are recorded in `collector/wrangler.jsonc`.
 Local development and tests still use local storage unless remote operations are explicitly requested.
+
+## September 9 quota outage and statistics migration
+
+D1 exhausted its free daily row-read quota. The old usage query alone accounted
+for 4,631,006 reads across 263 executions in query insights. The optimized Worker
+above is deployed, but production database access is still blocked by the quota.
+It returns 503 with `database daily quota exhausted` and a reset-time `Retry-After`.
+
+Migration `0009_compact_statistics.sql` and its restartable backfill are prepared
+for **September 10, 2026, 08:01 Asia/Singapore (00:01 UTC)**. A persistent one-time
+user timer on Desktop (`ArchDell`) will run after the quota reset, or when the
+machine next comes online. Failed attempts retry after five minutes. This changes
+no billing settings.
+
+The tested files are copied outside the working tree under:
+
+```text
+~/.local/share/ai-agents/maintenance/compact-statistics-20260909/
+```
+
+The job applies migrations, runs `compact-usage.mjs`, and checks an authenticated
+snapshot. Inspect its progress with:
+
+```sh
+systemctl --user status ai-agents-compact-statistics.timer
+journalctl --user -u ai-agents-compact-statistics.service
+```
+
+Snapshots remain unavailable until the schema/backfill completes. Reporter queues
+retain pending records. After recovery, inspect `snapshot_read_cost` and
+`usage_write_cost` in Worker logs and D1 query insights. The local 5,001-record
+benchmark measured four reads for statistics and ten for the full snapshot data
+batch. See [statistics design](statistics.md) for the seven-day detailed-data and
+30-day summary retention policy.
 
 ## Credentials and connecting clients
 
@@ -51,6 +87,7 @@ pnpm test
 pnpm exec wrangler deploy --dry-run
 pnpm exec wrangler d1 migrations apply ai-agents --remote
 pnpm exec wrangler deploy
+node scripts/compact-usage.mjs --remote
 ```
 
 For additional credentials, the provisioner generates a private SQL file without changing the database
@@ -76,7 +113,7 @@ run's ownership once per usage request, avoiding repeated database round trips
 for batches from the same transcript. Earlier cumulative history is retained when
 a thread spans an upgrade to per-response records.
 
-Live verification on `yoga-arch` confirmed the running AwesomeWM widget receives
+Before the quota outage, live verification on `yoga-arch` confirmed the running AwesomeWM widget receives
 three live sessions, zero stale/unverified sessions, complete usage coverage, and
 priced totals for both agents. All three reporter outboxes and quarantine queues
 were empty; recovered Claude warning markers were archived after acknowledgement.

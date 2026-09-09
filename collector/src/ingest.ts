@@ -1,4 +1,5 @@
 import type { Identity } from "./auth";
+import { dayBounds } from "./snapshot";
 import {
   hash,
   HttpError,
@@ -136,6 +137,15 @@ export async function usage(env: Env, who: Identity, payload: Json) {
   const statements: D1PreparedStatement[] = [];
   const accepted: string[] = [];
   const ownedRuns = new Set<string>();
+  const now = Date.now();
+  const config = await env.DB.prepare(
+    "SELECT reporting_timezone FROM workspaces WHERE id=?",
+  )
+    .bind(who.workspace_id)
+    .first<{ reporting_timezone: string }>();
+  if (!config) throw new HttpError(404, "workspace not found");
+  const days: [number, number][] = [];
+  const ignored: string[] = [];
   for (const value of list(payload.records, 64)) {
     const r = object(value),
       counts = object(r.counters),
@@ -150,8 +160,18 @@ export async function usage(env: Env, who: Identity, payload: Json) {
       model = optional(r.model);
     if (kind !== "delta" && kind !== "cumulative")
       throw new HttpError(400, "invalid measurement_kind");
-    if (time < Date.now() - 90 * 86400000)
-      throw new HttpError(410, "usage exceeds history window");
+    if (time < now - 7 * 86400000) {
+      // A resumed transcript can replay old IDs after detailed deduplication
+      // records have expired. Acknowledge them without adding them a second time.
+      accepted.push(record);
+      ignored.push(record);
+      continue;
+    }
+    let day = days.find(([from, to]) => time >= from && time < to);
+    if (!day) {
+      day = dayBounds(time, config.reporting_timezone);
+      days.push(day);
+    }
     if (!ownedRuns.has(run)) {
       const owner = await env.DB.prepare(
         "SELECT id FROM session_runs WHERE workspace_id=? AND id=? AND installation_id=?",
@@ -189,8 +209,8 @@ export async function usage(env: Env, who: Identity, payload: Json) {
     statements.push(
       env.DB.prepare(
         `INSERT OR IGNORE INTO usage_records(workspace_id,id,installation_id,agent,provider,native_record_id,stream_id,
-      counter_epoch,model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      counter_epoch,model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).bind(
         who.workspace_id,
         id,
@@ -210,6 +230,8 @@ export async function usage(env: Env, who: Identity, payload: Json) {
         w5,
         w1,
         digest,
+        day[0],
+        day[1],
       ),
     );
     statements.push(
@@ -219,6 +241,29 @@ export async function usage(env: Env, who: Identity, payload: Json) {
     );
     accepted.push(record);
   }
-  await env.DB.batch(statements);
-  return { accepted };
+  if (statements.length) {
+    statements.push(
+      env.DB.prepare(
+        "UPDATE workspaces SET revision=revision+1 WHERE id=? AND EXISTS(SELECT 1 FROM statistics_dirty WHERE workspace_id=?)",
+      ).bind(who.workspace_id, who.workspace_id),
+      env.DB.prepare(
+        `INSERT INTO notification_outbox(workspace_id,pending_revision) SELECT id,revision FROM workspaces
+        WHERE id=? AND EXISTS(SELECT 1 FROM statistics_dirty WHERE workspace_id=?)
+        ON CONFLICT(workspace_id) DO UPDATE SET pending_revision=excluded.pending_revision,next_attempt_at=0`,
+      ).bind(who.workspace_id, who.workspace_id),
+      env.DB.prepare("DELETE FROM statistics_dirty WHERE workspace_id=?").bind(
+        who.workspace_id,
+      ),
+    );
+    const result = await env.DB.batch(statements);
+    console.info(
+      JSON.stringify({
+        event: "usage_write_cost",
+        rows_read: result.reduce((n, r) => n + r.meta.rows_read, 0),
+        rows_written: result.reduce((n, r) => n + r.meta.rows_written, 0),
+        records: accepted.length - ignored.length,
+      }),
+    );
+  }
+  return { accepted, ignored };
 }

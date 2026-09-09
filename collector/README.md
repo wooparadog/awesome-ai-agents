@@ -77,7 +77,7 @@ They do not need to copy the AwesomeWM implementation or the Linux process helpe
   client `ack` messages, and hibernation-compatible `ping` / `pong` auto-response.
 - `GET /v1/sessions`: paginated runs; optional installation filter and cursor.
 - `GET /v1/sessions/:run_id/events`: paginated diagnostic events.
-- `GET /v1/usage?from=ISO&to=ISO`: usage within an explicit interval of up to 31 days.
+- `GET /v1/usage?from=ISO&to=ISO`: daily statistics for whole reporting days within the last 30 days.
 
 All routes require a scoped bearer token. Request bodies are limited to 256 KiB.
 Tokens are rate limited to 600 requests/minute. Persistent identity constraints
@@ -88,22 +88,40 @@ retry drain covers Worker failures. The Durable Object durably accepts publicati
 before the outbox is acknowledged. Per-socket acknowledgements bound notification
 queues. Neither HTTP success nor a socket send claims exactly-once delivery.
 
-The schema is in `migrations/`. It preserves original cumulative usage snapshots
-and derives ordered deltas, marking missing/reset baselines incomplete. A model
-switch across a cumulative interval has unknown model attribution. Claude message
-IDs are deduplicated across transcript copies. Prices were migrated from the
-repository's existing estimates; unknown models remain unpriced. No prompt,
-response, command arguments, tool payloads, or transcript paths are uploaded.
+The schema is in `migrations/`. Usage ingestion atomically updates compact daily
+buckets for the workspace and each observing run. Snapshots read those buckets;
+they never reconstruct totals from transcript history. Retries and copied records
+remain deduplicated. Legacy cumulative samples update only their own contribution
+and the immediately following sample when they arrive out of order. Prices are
+resolved when contributions are materialized and grouped by their rate set.
+Unknown models remain unpriced. No prompts, responses, command arguments, tool
+payloads, or transcript paths are uploaded.
 
-Lifecycle history is pruned after 30 days. Usage older than 90 days is folded into
-reporting-day summaries retained for one year, keeping cumulative baselines needed
-by surviving records. Historical queries must align to whole archived reporting
-days. Ended-run metadata is stripped after 90 days; compact identity tombstones
-remain to prevent resurrection. Retention is bounded per invocation; an oversized
-archive day is retained and logged for operator attention. Local outbox delivery
-has a seven-day retry horizon and a 32 MiB capacity target; any evictions mark
-coverage incomplete. Daily boundaries use the workspace timezone, initially
-`Asia/Singapore`.
+Detailed usage and lifecycle events have a seven-day retention window. Daily
+statistics are retained for 30 days. Cleanup runs at most hourly, in bounded,
+indexed batches. One older cumulative baseline per stream may remain within the
+30-day window. Closed-run metadata is stripped after seven days; ended identities
+are removed after 30 days when no retained usage references them. Local transcripts
+remain the source for longer-term history.
+
+Usage older than seven days is acknowledged in both `accepted` and `ignored`
+without being stored or recounted. This prevents old transcript replays from
+reintroducing usage after its deduplication evidence has expired. Historical API
+requests must align to whole reporting days. Daily boundaries use the workspace
+timezone, initially `Asia/Singapore`. Keep that timezone stable for the retention
+window; changing it requires rebuilding retained statistics.
+
+Migration `0009_compact_statistics.sql` requires one restartable backfill on an
+existing database. After applying migrations and deploying the new Worker, run:
+
+```sh
+node scripts/compact-usage.mjs --remote
+```
+
+Use `--local` for development, optionally with `--persist-to DIRECTORY`. Snapshots
+return 503 until the backfill finishes; new ingestion can proceed during it. Old
+Worker versions cannot insert usage without reporting-day metadata after the
+migration. See [statistics design and read costs](../docs/statistics.md).
 
 ## Validation and limits
 
