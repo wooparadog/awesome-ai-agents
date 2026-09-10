@@ -1,5 +1,17 @@
 # Migration to the collector-focused layout
 
+## Shell reporter to Rust daemon
+
+The current reporting implementation is the [Rust daemon](../reporters/rust/README.md).
+Build it, then run `python3 reporters/rust/install.py --service`. This replaces
+registered hooks and disables the old timer/path units. Existing run identities,
+credentials, queues, and usage cursors are reused. The daemon owns scheduling,
+collection, reconciliation, and delivery. See its guide for copied installations,
+Codex trust, custom supervisors, and rollback.
+
+## Earlier repository layout migration
+
+
 The collector protocol, database bindings, credentials, configuration directories,
 and durable reporter state are unchanged. This refactor moves ownership and paths;
 it does not require a new database or reissuing tokens.

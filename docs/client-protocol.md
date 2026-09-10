@@ -61,8 +61,9 @@ Run entries include `id`, `session_id`, `execution_id`, `installation_id`, `agen
 path describes the reporting installation and must never be interpreted as a
 process or path on the viewing machine.
 
-Reporters reconcile no more often than every five minutes by default. The collector
-allows ten minutes of presence freshness before marking a run stale. This lease
+The Rust reporter checks local processes and transcripts every 30 seconds and
+reports idle presence every five minutes. Local checks alone make no HTTP request.
+The collector allows ten minutes of presence freshness before marking a run stale. This lease
 is separate from the two-minute maximum age accepted for a newly submitted presence observation.
 Hooks can submit a fresh observation of their own identified agent process without
 waiting for reconciliation. Replayed lifecycle events alone never renew presence.

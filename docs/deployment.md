@@ -79,7 +79,7 @@ Use the read token with a viewer and the desktop write token with the `desktop` 
 Provision separate write credentials for additional installations rather than copying one machine's identity.
 
 Deployment does not install hooks, change the desktop widget, or enable a local reconciliation timer.
-See the [reporter guide](../reporters/shell/README.md) and
+See the [reporter guide](../reporters/rust/README.md) and
 [AwesomeWM client guide](../clients/awesomewm/README.md) for those steps.
 
 ## Publishing updates
@@ -162,3 +162,33 @@ The unmodified AwesomeWM smoke test did not connect with that default resolver; 
 resolver before using it from this network. No TLS verification was disabled.
 
 The repository was not pushed as part of deployment.
+
+## Rust daemon rollout (2026-09-10)
+
+The preceding background-uploader work was saved in local commit `1ffcdd1` before
+starting the daemon rewrite. At approximately 11:22 Singapore time, ArchDell,
+YogaArch, Karry, and Rain were running `~/.local/bin/ai-agents daemon` under one
+`ai-agents.service` each. The legacy reconciliation timers and upload path
+watchers were disabled. Existing credentials, run identities, outboxes, and
+transcript cursors were reused; Rain retained Codex-only hook registration.
+
+The updated legacy hook shim forwards cached hook commands to the Rust binary.
+Desktop and Karry retain their existing proxy environment files through migrated
+service drop-ins. All four queues were empty after migration, with zero new
+quarantined records, and Yoga's connected viewer received their presence reports.
+Desktop still reports incomplete coverage for its pre-existing missing transcript;
+the daemon does not treat unavailable evidence as complete usage.
+
+The Desktop canary exposed archived shell runs retaining old execution sequence
+counters. The fix closes archived records locally without emitting lifecycle
+events: the collector already supersedes those generations. A regression test
+covers the migration. The seven rejected canary-generated events and their
+matching diagnostic markers were moved to the private local directory
+`~/.local/state/ai-agents/maintenance/rust-canary-20260910`; no usage evidence was
+removed. The corrected binary was installed before migrating the other machines.
+
+The release binary measured 2.9 MB; an isolated local test measured 1.6 ms median
+hook latency, 2.7 ms p95, 4,680 KiB daemon RSS, one thread, and no additional HTTP
+requests or measurable CPU time over a 35-second idle sample. After connecting to production, RSS across the four
+machines ranged from 5,760 to 6,260 KiB (about 5.6–6.1 MiB). See the
+[daemon guide](../reporters/rust/README.md) for timing, state bounds, and rollback.

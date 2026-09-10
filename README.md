@@ -4,7 +4,7 @@ Collect coding-agent activity across machines and make it available to any clien
 Track running sessions, agents waiting for attention, and token usage in one place.
 
 The collector runs on **Cloudflare Workers + D1**, with **hibernating WebSockets**
-for change notifications. Agent hooks report through a small shell reporter.
+for change notifications. Agent hooks report through a single Rust daemon on each machine.
 **AwesomeWM is the first viewer client**; the same API can support Windows tray
 apps, macOS menu-bar apps, and other interfaces.
 
@@ -25,7 +25,7 @@ clients display the shared state and need no access to agent processes or transc
 ## Get started
 
 1. [Run the collector and provision credentials](collector/README.md).
-2. [Install the shell reporter](reporters/shell/README.md) on each agent machine.
+2. [Install the Rust daemon](reporters/rust/README.md) on each agent machine.
 3. [Connect the AwesomeWM client](clients/awesomewm/README.md), or
    [build another client](docs/client-protocol.md).
 
@@ -44,13 +44,13 @@ usage is shown explicitly rather than counted as zero.
 | Directory | Responsibility |
 | --- | --- |
 | [`collector/`](collector/) | Worker, D1 migrations, authentication, accounting, WebSocket subscriptions, provisioning, server tests |
-| [`reporters/`](reporters/README.md) | Agent integrations that submit observations; currently the Linux shell reporter |
+| [`reporters/`](reporters/README.md) | Agent integrations that submit observations; the Linux Rust daemon and legacy shell reporter |
 | [`clients/`](clients/README.md) | Interfaces that consume the collector; currently AwesomeWM |
 | [`docs/`](docs/) | Architecture, public client protocol, and migration guide |
 | [`scripts/`](scripts/) | Repository-wide local checks |
 
 The collector can be developed and run without installing AwesomeWM, Lua, or the
-shell reporter. Client-specific dependencies and tests live with their client.
+reporter. Client-specific dependencies and tests live with their client.
 The existing repository URL remains unchanged.
 
 ## Platform support
@@ -58,7 +58,7 @@ The existing repository URL remains unchanged.
 | Component | Available now | Future extensions |
 | --- | --- | --- |
 | Collector | Cloudflare Workers; local development through Wrangler | More consumers of the existing API |
-| Agent reporter | Linux shell; Claude Code and Codex hooks | Native Windows/macOS reporters and other agent adapters |
+| Agent reporter | Linux Rust daemon; Claude Code and Codex hooks | Native Windows/macOS reporters and other agent adapters |
 | Viewer | AwesomeWM on Linux | Windows tray and macOS menu-bar clients |
 
 Windows and macOS clients are not implemented yet. A future viewer on either OS
@@ -75,7 +75,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for component boundaries and checks, and
 Existing `require("lib.ai")`, root `hook.sh`, and root `install-hooks.sh` entry
 points remain as compatibility forwarders. New installations should use the
 component paths above. See the [migration guide](docs/migration.md) for existing
-widget configurations and reconciliation timers.
+widget configurations and migration from reconciliation timers.
 
 ## License
 

@@ -37,7 +37,7 @@ pnpm check
 pnpm test
 ```
 
-To check all components, also install Python 3, the shell reporter's Linux runtime
+To check all components, also install Rust 1.89 or newer, Python 3, the shell reporter's Linux runtime
 dependencies, ShellCheck, StyLua, and Lua 5.4 with `lgi` and libsoup 3 introspection:
 
 ```sh
@@ -50,6 +50,6 @@ manager. Interactive connection checks are described in the
 [client README](clients/awesomewm/README.md).
 
 All supplied checks run locally. The scripts do not register hooks in your personal
-agent configuration, enable your systemd timers, push commits, or deploy Cloudflare
+agent configuration, enable reporting services, push commits, or deploy Cloudflare
 resources. Provisioning and development-server setup are explicit commands in the
 [collector guide](collector/README.md).

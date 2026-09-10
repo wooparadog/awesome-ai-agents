@@ -8,6 +8,11 @@ cd "$root"
   pnpm check
   pnpm test
 )
+cargo fmt --manifest-path reporters/rust/Cargo.toml --check
+cargo clippy --locked --manifest-path reporters/rust/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path reporters/rust/Cargo.toml
+cargo build --locked --manifest-path reporters/rust/Cargo.toml
+python3 -m unittest discover -s reporters/rust/tests -v
 python3 -m unittest discover -s reporters/shell/tests -v
 shellcheck hook.sh install-hooks.sh reporters/shell/*.sh clients/awesomewm/local-hook.sh scripts/check.sh
 stylua --config-path clients/awesomewm/stylua.toml --check init.lua clients/awesomewm

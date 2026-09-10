@@ -6,7 +6,8 @@ write credentials. They do not render the collector's state or require a viewer.
 
 | Reporter | Status | Requirements |
 | --- | --- | --- |
-| [Shell](shell/README.md) | Implemented | Linux, `/proc`, `sh`, `curl`, `jq`, coreutils, `flock` |
+| [Rust daemon](rust/README.md) | Recommended | Linux and `/proc`; optional systemd service |
+| [Shell](shell/README.md) | Legacy / rollback | Linux, `/proc`, `sh`, `curl`, `jq`, coreutils, `flock` |
 | Native Windows | Future | Not implemented |
 | Native macOS | Future | Not implemented |
 

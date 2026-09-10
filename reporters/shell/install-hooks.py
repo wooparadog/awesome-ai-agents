@@ -46,7 +46,7 @@ def command(agent, event):
 
 # Matched by shape rather than by absolute path, so a moved checkout is
 # recognised and replaced instead of silently duplicated.
-OURS = re.compile(r"(^|/)hook\.sh['\"]?\s+(claude|codex)\s+\S+\s*$")
+OURS = re.compile(r"(^|/)(?:hook\.sh['\"]?\s+|ai-agents['\"]?\s+hook\s+)(claude|codex)\s+\S+\s*$")
 
 
 def is_ours(entry):

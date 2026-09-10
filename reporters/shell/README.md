@@ -1,5 +1,9 @@
 # Shell reporter
 
+New installations should use the [Rust daemon](../rust/README.md), which replaces
+this runtime and its timer/path units. This implementation remains for migration
+and rollback. The hook shim forwards to Rust when `config/daemon-binary` is set.
+
 Report Claude Code and Codex activity to the collector from Linux machines.
 Runtime dependencies: POSIX shell, `curl`, `jq`, GNU coreutils, `flock`, and `/proc`.
 The hook installer additionally requires Python 3. No AwesomeWM or Lua is needed.

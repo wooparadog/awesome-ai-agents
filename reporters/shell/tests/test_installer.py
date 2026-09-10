@@ -64,6 +64,13 @@ class InstallerTest(unittest.TestCase):
             self.assertIn(str(expected),output.getvalue())
             self.assertIn('would install and enable user reconciliation timer',output.getvalue())
             self.assertEqual(list(Path(temp).iterdir()),[])
+    def test_rollback_replaces_rust_hook_instead_of_duplicating_it(self):
+        rust = {'hooks': [{'command': "AI_AGENTS_STATE_DIR='/custom state' '/bin path/ai-agents' hook codex Stop"}]}
+        config = {'hooks': {'Stop': [rust]}}
+        result = module.merge(config, 'codex', ['Stop'], 3)
+        self.assertEqual(len(result['hooks']['Stop']), 1)
+        self.assertIn('hook.sh', result['hooks']['Stop'][0]['hooks'][0]['command'])
+
     def test_uninstall_keeps_other_commands_in_shared_group(self):
         other={'command':'other-tool'}
         config={'hooks':{'Stop':[{'matcher':'*','hooks':[{'command':'/old/hook.sh claude Stop'},other]}]}}
