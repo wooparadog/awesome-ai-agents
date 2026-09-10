@@ -1,0 +1,16 @@
+[Unit]
+Description=AI agent reporting daemon
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment="AI_AGENTS_CONFIG_DIR=%h/.config/ai-agents"
+Environment="AI_AGENTS_STATE_DIR=%h/.local/state/ai-agents"
+ExecStart="%h/.local/bin/ai-agents" daemon
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

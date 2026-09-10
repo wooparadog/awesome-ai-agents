@@ -11,6 +11,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SERVICE_SOURCE = os.path.join(HERE, "systemd", "ai-agents.service")
 BINARY = os.path.expanduser("~/.local/bin/ai-agents")
 CONFIG_DIR = ""
 STATE_DIR = ""
@@ -114,6 +115,20 @@ def unit_value(value):
     return str(value).replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
 
 
+def path_override():
+    defaults = (os.path.expanduser("~/.local/bin/ai-agents"),
+                os.path.expanduser("~/.config/ai-agents"),
+                os.path.expanduser("~/.local/state/ai-agents"))
+    if (BINARY, CONFIG_DIR, STATE_DIR) == defaults:
+        return None
+    return ('# Managed by ai-agents install.py; rerun the installer to change paths.\n'
+            '[Service]\n'
+            f'Environment="AI_AGENTS_CONFIG_DIR={unit_value(CONFIG_DIR)}"\n'
+            f'Environment="AI_AGENTS_STATE_DIR={unit_value(STATE_DIR)}"\n'
+            'ExecStart=\n'
+            f'ExecStart="{unit_value(BINARY)}" daemon\n')
+
+
 def main():
     global BINARY, CONFIG_DIR, STATE_DIR
     parser = argparse.ArgumentParser(description=__doc__)
@@ -147,10 +162,26 @@ def main():
         updates.append((path, strip(config,events) if args.uninstall else merge(config,agent,events,timeout)))
     unit_dir = os.path.join(os.environ.get("XDG_CONFIG_HOME",os.path.expanduser("~/.config")), "systemd/user")
     service = "ai-agents.service"
+    override_file = os.path.join(unit_dir, service+".d", "00-installer-paths.conf")
+    content = None
+    override = None
+    if args.service and not args.uninstall:
+        try:
+            with open(SERVICE_SOURCE) as fh:
+                content = fh.read()
+        except OSError as exc:
+            parser.error(f"cannot read service unit {SERVICE_SOURCE}: {exc}; include the systemd directory beside install.py")
+        override = path_override()
     legacy = ("ai-agents-reconcile.timer", "ai-agents-upload.path", "ai-agents-reconcile.service", "ai-agents-upload.service")
     if args.dry_run:
         for path, config in updates:
             write(path,config,True)
+        if content is not None:
+            print(f"--- would write {os.path.join(unit_dir,service)} ---\n{content}")
+            if override is not None:
+                print(f"--- would write {override_file} ---\n{override}")
+            elif os.path.exists(override_file):
+                print(f"would remove {override_file}")
         print("would " + ("stop reporter and remove hooks" if args.uninstall else "install binary and " + ("migrate to one user service" if args.service else "register hooks; run ai-agents daemon with your supervisor")))
         return
     env = dict(os.environ,AI_AGENTS_CONFIG_DIR=CONFIG_DIR,AI_AGENTS_STATE_DIR=STATE_DIR)
@@ -169,6 +200,7 @@ def main():
             subprocess.run(["systemctl","--user","disable","--now",service],check=True)
             unit = os.path.join(unit_dir,service)
             if os.path.exists(unit): os.remove(unit)
+            if os.path.exists(override_file): os.remove(override_file)
         else:
             # Carry forward existing proxy/network environment overrides. Keep
             # originals for rollback. Copy only once, preserving new overrides.
@@ -181,13 +213,12 @@ def main():
                         target = os.path.join(dest,entry)
                         if entry.endswith(".conf") and not os.path.exists(target):
                             shutil.copy2(os.path.join(source,entry),target)
-            content = ('[Unit]\nDescription=AI agent reporting daemon\nStartLimitIntervalSec=0\n\n'
-                       '[Service]\nType=simple\n'
-                       f'Environment="AI_AGENTS_CONFIG_DIR={unit_value(CONFIG_DIR)}"\n'
-                       f'Environment="AI_AGENTS_STATE_DIR={unit_value(STATE_DIR)}"\n'
-                       f'ExecStart="{unit_value(BINARY)}" daemon\nRestart=on-failure\nRestartSec=5\n'
-                       'UMask=0077\nNoNewPrivileges=true\n\n[Install]\nWantedBy=default.target\n')
             with open(os.path.join(unit_dir,service),"w") as fh: fh.write(content)
+            if override is not None:
+                os.makedirs(dest,exist_ok=True)
+                with open(override_file,"w") as fh: fh.write(override)
+            elif os.path.exists(override_file):
+                os.remove(override_file)
             existing = [name for name in legacy if os.path.exists(os.path.join(unit_dir,name))]
             if existing:
                 subprocess.run(["systemctl","--user","disable","--now",*existing],check=True)

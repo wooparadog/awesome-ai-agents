@@ -11,6 +11,10 @@ write credentials. They do not render the collector's state or require a viewer.
 | Native Windows | Future | Not implemented |
 | Native macOS | Future | Not implemented |
 
+For Linux hosts with systemd, follow the [installation guide](../docs/linux-systemd.md).
+The shared [service unit](rust/systemd/ai-agents.service) and optional
+[network override](rust/systemd/10-network.conf.example) are versioned with the reporter.
+
 A new reporter must preserve retry IDs and per-execution ordering, distinguish
 fresh process observations from historical replay, and submit only allowed
 metadata. Agent/PID discovery, transcript formats, local persistence, and scheduling

@@ -25,7 +25,8 @@ clients display the shared state and need no access to agent processes or transc
 ## Get started
 
 1. [Run the collector and provision credentials](collector/README.md).
-2. [Install the Rust daemon](reporters/rust/README.md) on each agent machine.
+2. [Install the Rust daemon on Linux with systemd](docs/linux-systemd.md) on each
+   agent machine, or use [another supervisor](reporters/rust/README.md#install-or-migrate).
 3. [Connect the AwesomeWM client](clients/awesomewm/README.md), or
    [build another client](docs/client-protocol.md).
 

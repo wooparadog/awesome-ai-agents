@@ -1,0 +1,4 @@
+# Optional: copy to ~/.config/systemd/user/ai-agents.service.d/10-network.conf
+# after creating the environment file. See docs/linux-systemd.md.
+[Service]
+EnvironmentFile=%h/.config/ai-agents/network.env

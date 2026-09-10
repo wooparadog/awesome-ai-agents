@@ -6,8 +6,11 @@ The current reporting implementation is the [Rust daemon](../reporters/rust/READ
 Build it, then run `python3 reporters/rust/install.py --service`. This replaces
 registered hooks and disables the old timer/path units. Existing run identities,
 credentials, queues, and usage cursors are reused. The daemon owns scheduling,
-collection, reconciliation, and delivery. See its guide for copied installations,
-Codex trust, custom supervisors, and rollback.
+collection, reconciliation, and delivery. The installer uses the versioned
+[`ai-agents.service`](../reporters/rust/systemd/ai-agents.service); include its
+`systemd/` directory when copying the installer to another host. Follow the
+[Linux systemd guide](linux-systemd.md) for service setup and boot behavior, and
+the daemon guide for Codex trust, custom supervisors, and rollback.
 
 ## Earlier repository layout migration
 

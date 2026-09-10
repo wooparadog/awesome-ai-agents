@@ -8,6 +8,9 @@ only by the installer; systemd is an optional supervisor.
 
 ## Install or migrate
 
+For the complete Linux setup, see the [systemd installation guide](../../docs/linux-systemd.md),
+including headless-server boot, proxy settings, custom paths, and manual unit installation.
+
 Build with Rust 1.89 or newer:
 
 ```sh
@@ -32,10 +35,18 @@ machine's architecture and libc. A collector configuration or all three cloud
 options are required. Use loopback HTTP only for local development.
 
 `--service` installs **one** `ai-agents.service` and disables the old reconciliation
-timer, upload path watcher, and their services. Existing service drop-ins are
+timer, upload path watcher, and their services. The installer copies the shared
+[service unit](systemd/ai-agents.service) from this repository. Its `%h` paths work
+for any reporting user; custom paths go in the managed
+`ai-agents.service.d/00-installer-paths.conf` override. Existing service drop-ins are
 carried forward, including proxy environment files. Legacy unit files, credentials,
 and state remain available for rollback. Do not run both reporters against the
 same state directory; the daemon holds their existing locks.
+
+When copying the installer to another machine, include `systemd/ai-agents.service`
+beside it in the same relative directory. The optional
+[network override example](systemd/10-network.conf.example) can be copied too.
+See the [prebuilt installation steps](../../docs/linux-systemd.md#install-a-prebuilt-binary-on-another-machine).
 
 Without `--service`, stop your previous reporter/scheduler and launch
 `ai-agents daemon` under your own supervisor. The daemon runs in the foreground,
