@@ -116,7 +116,12 @@ Use an executable installation path without literal quote characters: systemd
 rejects those in `ExecStart` paths. Spaces and percent signs are supported by the
 installer's escaping.
 
-For a proxy, create `~/.config/ai-agents/network.env` containing your network
+To share a proxy between the daemon and CLI, add a `proxy_url` string to
+`~/.config/ai-agents/config.json` (preserving its URL and installation ID), then
+restart the service. For example: `"proxy_url": "http://127.0.0.1:7890"`.
+
+For systemd environment configuration instead, create
+`~/.config/ai-agents/network.env` containing your network
 environment, for example:
 
 ```ini
@@ -168,7 +173,15 @@ systemctl --user status ai-agents.service
 systemctl --user cat ai-agents.service
 journalctl --user -u ai-agents.service -n 50 --no-pager
 ~/.local/bin/ai-agents status
+~/.local/bin/ai-agents status --json
+~/.local/bin/ai-agents web --expires 10m
 ```
+
+Open the URL printed by `ai-agents web` for the [live web panel](../clients/web/README.md).
+`status` is human-readable; `status --json` is intended for scripts. CLI network
+commands and the daemon can share a `proxy_url` setting in the reporter's private
+`config.json`. Without that setting, CLI commands inherit the shell environment;
+systemd-only environment files apply to the daemon.
 
 Check that the service is running and pending hooks/uploads drain. Rebuild and
 rerun the installer to upgrade; the executable is replaced by rename and the

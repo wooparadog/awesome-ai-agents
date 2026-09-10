@@ -5,8 +5,7 @@ Track running sessions, agents waiting for attention, and token usage in one pla
 
 The collector runs on **Cloudflare Workers + D1**, with **hibernating WebSockets**
 for change notifications. Agent hooks report through a single Rust daemon on each machine.
-**AwesomeWM is the first viewer client**; the same API can support Windows tray
-apps, macOS menu-bar apps, and other interfaces.
+View live usage in the **web panel** or **AwesomeWM widget**; both use the same API.
 
 ```mermaid
 flowchart LR
@@ -27,8 +26,8 @@ clients display the shared state and need no access to agent processes or transc
 1. [Run the collector and provision credentials](collector/README.md).
 2. [Install the Rust daemon on Linux with systemd](docs/linux-systemd.md) on each
    agent machine, or use [another supervisor](reporters/rust/README.md#install-or-migrate).
-3. [Connect the AwesomeWM client](clients/awesomewm/README.md), or
-   [build another client](docs/client-protocol.md).
+3. Run `ai-agents web` and open its login link for the [web panel](clients/web/README.md),
+   or [connect the AwesomeWM client](clients/awesomewm/README.md).
 
 Each reporter gets an installation-bound write token. Viewers use separate read
 tokens. The reporter spools events during outages, retries with stable IDs, and
@@ -46,7 +45,7 @@ usage is shown explicitly rather than counted as zero.
 | --- | --- |
 | [`collector/`](collector/) | Worker, D1 migrations, authentication, accounting, WebSocket subscriptions, provisioning, server tests |
 | [`reporters/`](reporters/README.md) | Agent integrations that submit observations; the Linux Rust daemon and legacy shell reporter |
-| [`clients/`](clients/README.md) | Interfaces that consume the collector; currently AwesomeWM |
+| [`clients/`](clients/README.md) | Interfaces that consume the collector; the web panel and AwesomeWM |
 | [`docs/`](docs/) | Architecture, public client protocol, and migration guide |
 | [`scripts/`](scripts/) | Repository-wide local checks |
 
@@ -60,7 +59,7 @@ The existing repository URL remains unchanged.
 | --- | --- | --- |
 | Collector | Cloudflare Workers; local development through Wrangler | More consumers of the existing API |
 | Agent reporter | Linux Rust daemon; Claude Code and Codex hooks | Native Windows/macOS reporters and other agent adapters |
-| Viewer | AwesomeWM on Linux | Windows tray and macOS menu-bar clients |
+| Viewer | Web browser; AwesomeWM on Linux | Windows tray and macOS menu-bar clients |
 
 Windows and macOS clients are not implemented yet. A future viewer on either OS
 can monitor agents reported from Linux machines; observing agents running natively

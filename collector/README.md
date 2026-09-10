@@ -79,7 +79,10 @@ They do not need to copy the AwesomeWM implementation or the Linux process helpe
 - `GET /v1/sessions/:run_id/events`: paginated diagnostic events.
 - `GET /v1/usage?from=ISO&to=ISO`: daily statistics for whole reporting days within the last 30 days.
 
-All routes require a scoped bearer token. Request bodies are limited to 256 KiB.
+Private reporting/statistics routes require a scoped bearer token. The public
+web shell explains CLI login, and one-time login/ticket endpoints support browser
+access; see the [browser protocol](../docs/client-protocol.md#browser-login-and-subscriptions).
+Request bodies are limited to 256 KiB.
 Tokens are rate limited to 600 requests/minute. Persistent identity constraints
 prevent cross-installation writes and conflicting retries. Triggers atomically
 reduce new lifecycle events and increment the workspace revision. The notification
@@ -147,3 +150,22 @@ A missing transcript, stopped scheduler, or process-identity lookup failure is
 shown as incomplete/unverified, rather than guessed to be zero or ended. Codex
 account quota percentages are not merged across machines because the current
 integration does not establish shared account identity.
+
+
+## Web panel deployment
+
+The Worker serves `clients/web/public/` through its `ASSETS` binding. The frontend
+has no build step. Deploy the repository with that directory present.
+
+Apply `0010_browser_access.sql` before deploying the browser-enabled Worker; it
+adds parent-token relationships, expiring login links, and connection tickets.
+Existing credentials and compact usage statistics are preserved. Then deploy
+with the project's existing Wrangler configuration and update reporter binaries
+so `ai-agents web` is available. No new Worker secret or external auth provider is
+needed. A write credential can now delegate workspace-wide read access to a
+browser through a one-time link; read credentials cannot delegate access.
+
+The [web guide](../clients/web/README.md) documents login, expiry/revocation,
+local development origin configuration, and browser tests. The unauthenticated
+homepage is available even when D1 is unavailable; private snapshots continue
+to return their existing explicit quota/migration errors.

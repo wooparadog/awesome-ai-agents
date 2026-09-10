@@ -39,6 +39,17 @@ pub fn validate_url(url: &str) -> Result<()> {
     }
     Ok(())
 }
+pub fn http_client(config: &Value, timeout: Duration) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(timeout)
+        .pool_max_idle_per_host(1);
+    if let Some(proxy) = config["proxy_url"].as_str() {
+        builder = builder.proxy(reqwest::Proxy::all(proxy)?.no_proxy(reqwest::NoProxy::from_env()));
+    }
+    Ok(builder.build()?)
+}
 struct Job {
     endpoint: &'static str,
     body: Value,
@@ -579,12 +590,7 @@ pub async fn run(paths: Paths) -> Result<()> {
         .as_str()
         .context("missing installation ID")?
         .to_owned();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(10))
-        .pool_max_idle_per_host(1)
-        .build()?;
+    let client = http_client(&config, Duration::from_secs(10))?;
     store::remove(&paths.socket())?;
     let socket = UnixDatagram::bind(paths.socket())?;
     fs::set_permissions(paths.socket(), fs::Permissions::from_mode(0o600))?;

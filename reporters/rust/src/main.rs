@@ -1,3 +1,4 @@
+mod cli;
 mod daemon;
 mod hooks;
 mod store;
@@ -49,31 +50,34 @@ fn run(args: &[String]) -> Result<()> {
                 &paths.config.join("config.json"),
                 &json!({"url":args[2].trim_end_matches('/'),"installation_id":args[3]}),
             )?;
+            println!(
+                "Configured installation {}. Run ai-agents daemon or install its user service.",
+                args[3]
+            );
             Ok(())
         }
         "status" => {
-            let mut health =
-                store::read(&paths.state.join("daemon-status.json")).unwrap_or(json!({}));
-            health["running"] = json!(
-                hooks::process(health["pid"].as_u64().unwrap_or(0))
-                    .is_some_and(|p| Some(p.0.as_str()) == health["fingerprint"].as_str())
-            );
-            println!(
-                "{}",
-                json!({"daemon":health,"queued":store::files(&paths.state.join("outbox"))?.len(),"pending_hooks":store::files(&paths.state.join("inbox"))?.len(),"quarantined":store::files(&paths.state.join("quarantine"))?.len()})
-            );
-            Ok(())
+            if args.len() > 3 || args.get(2).is_some_and(|v| v != "--json") {
+                bail!("usage: ai-agents status [--json]")
+            }
+            cli::status(&paths, args.get(2).is_some_and(|v| v == "--json"))
         }
+        "web" => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()?
+            .block_on(cli::web(&paths, &args[2..])),
         "reconcile" | "flush" => {
             let socket = std::os::unix::net::UnixDatagram::unbound()?;
             socket.set_nonblocking(true)?;
             socket.send_to(b"reconcile", paths.socket())?;
+            println!(
+                "Reconciliation requested. The daemon will collect and upload pending reports."
+            );
             Ok(())
         }
         "help" | "--help" => {
-            println!(
-                "ai-agents daemon | hook AGENT EVENT | status | reconcile | flush | init URL INSTALLATION_ID TOKEN_FILE"
-            );
+            cli::help();
             Ok(())
         }
         _ => bail!("unknown command; see ai-agents --help"),

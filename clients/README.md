@@ -6,6 +6,7 @@ usage totals, or ingest events merely to display them.
 
 | Client | Status | Platform |
 | --- | --- | --- |
+| [Web panel](web/README.md) | Implemented | Modern desktop/mobile browser |
 | [AwesomeWM](awesomewm/README.md) | Implemented | Linux desktop |
 | Windows tray | Future | Not implemented |
 | macOS menu bar | Future | Not implemented |

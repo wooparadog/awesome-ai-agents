@@ -18,13 +18,63 @@ installation. The server determines workspace scope from the token; client-suppl
 workspace fields do not grant access. Keep tokens out of URLs and logs.
 
 Native desktop clients should use a WebSocket library that supports the Authorization
-header on the upgrade request. A future browser client will need a separately
-designed authentication flow because browser WebSocket constructors cannot set
-arbitrary headers; no browser-ticket or cookie authentication is provided today.
+header on the upgrade request. Browser clients instead use a short-lived
+connection ticket, described below; neither cookies nor URL query parameters
+carry persistent credentials.
 
 Requests with JSON bodies include `schema_version: 1` and
 `Content-Type: application/json`. Bodies are limited to 256 KiB. Each token is
 limited to 600 HTTP requests per minute; honor `Retry-After` on 429 responses.
+
+## Browser login and subscriptions
+
+`GET /`, `/login`, and `/panel` serve the public web shell. The homepage explains
+how to generate a login URL from a configured reporter. Private API data still
+requires authorization.
+
+| Endpoint | Authorization | Result |
+| --- | --- | --- |
+| `POST /v1/browser-links` | Reporter **write** token | Single-use login URL and expiry timestamps |
+| `POST /v1/browser-login` | One-time link secret in JSON body | New browser **read** token, expiry, workspace ID |
+| `POST /v1/browser-ticket` | **Read** token | Single-use WebSocket ticket valid for up to 60 seconds |
+| `GET /v1/browser-subscribe` | Same-origin WebSocket with ticket subprotocol | Existing v1 subscription protocol |
+| `POST /v1/browser-logout` | **Read** token being revoked | Revokes that token and closes its subscriptions |
+
+All POST bodies include `schema_version: 1`. Link creation accepts `expires_in`
+(seconds, default 600, minimum 60, maximum 3600) and returns `url`, `expires_at`,
+and `browser_expires_at` (UTC milliseconds). The URL is `/login#token=ID.SECRET`;
+its fragment never reaches HTTP logs. The browser removes the fragment before
+posting `{schema_version:1, token:"ID.SECRET"}` to exchange it. An invalid secret
+returns 401; an expired/consumed link returns 410. Redemption is atomic, so only
+one concurrent caller obtains a token.
+
+**Delegation policy:** a configured write credential can authorize browser read
+access to its entire workspace. The browser cannot ingest data or create further
+login links. Browser credentials expire after at most 30 days and inherit the
+originating credential's expiry, revocation, and installation-disable state. The
+response contains `token`, `expires_at`, and `workspace_id`; the web client stores
+it in localStorage for that origin. Native read/write credentials are unchanged.
+
+For a browser subscription, POST `{schema_version:1}` to `/v1/browser-ticket` with
+`Authorization: Bearer ...`, then connect using these offered subprotocols:
+
+```js
+new WebSocket("wss://collector.example/v1/browser-subscribe", [
+  "ai-agents.v1",
+  "ticket." + ticket,
+]);
+```
+
+The server selects only `ai-agents.v1`. The ticket is consumed once and its parent
+read credential is checked again at upgrade. Persistent credentials and tickets
+are never placed in query strings. Browser POST requests reject foreign origins;
+WebSocket upgrades require an exact same-origin `Origin` header. No CORS access is
+provided. The rest of the subscription/acknowledgement protocol below is shared
+with native clients.
+
+Each writer is limited to eight outstanding links and 32 active browser tokens;
+each reader is limited to eight unused connection tickets. Secrets are hashed in
+D1 and expired rows are cleaned in bounded, indexed hourly maintenance batches.
 
 ## Reading state
 

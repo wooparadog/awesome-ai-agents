@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="A live command center for your coding agents. Sessions, token usage, and machine health in one place."
+    />
+    <title>AGENT//GRID — Live telemetry</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Agent Grid home"
+          ><span class="brand-mark">▥</span> AGENT<span class="slashes">//</span
+          >GRID<span class="version">v1.0</span></a
+        >
+        <div class="top-right">
+          <span class="connection" id="connection" role="status"
+            ><span class="dot"></span
+            ><span id="connection-text">AWAITING ACCESS</span></span
+          ><button class="button subtle" id="logout" hidden>Sign out ↗</button>
+        </div>
+      </header>
+      <main>
+        <section id="welcome" class="welcome">
+          <div class="eyebrow">
+            <span class="tiny-line"></span> OBSERVABILITY FOR YOUR AGENT FLEET
+          </div>
+          <h1>
+            Your agents are working.<br /><span>See the whole system.</span>
+          </h1>
+          <p class="intro">
+            Every session. Every machine. Every token.<br />A live view of your
+            coding agents, straight from the source.
+          </p>
+          <div class="access-grid">
+            <div class="terminal">
+              <div class="terminal-bar">
+                <span>● ● ●</span><span>establish connection</span
+                ><span>~/</span>
+              </div>
+              <div class="terminal-body">
+                <p class="muted"># On a machine with the reporter installed</p>
+                <div class="command">
+                  <span class="prompt">❯</span
+                  ><code>ai-agents web --expires 10m</code
+                  ><button
+                    class="copy"
+                    id="copy-command"
+                    aria-label="Copy login command"
+                  >
+                    COPY
+                  </button>
+                </div>
+                <p class="terminal-help">
+                  Open the generated link in this browser.
+                </p>
+                <div class="terminal-foot">
+                  <span class="dot green"></span> Single-use link
+                  <span>·</span> Read-only browser access
+                </div>
+              </div>
+            </div>
+            <div class="access-notes">
+              <div>
+                <span class="step">01</span>
+                <p>
+                  <strong>Generate a login link</strong
+                  ><span>Your installed CLI authorizes this browser.</span>
+                </p>
+              </div>
+              <div>
+                <span class="step">02</span>
+                <p>
+                  <strong>Open it once. Stay connected.</strong
+                  ><span>Browser access lasts up to 30 days.</span>
+                </p>
+              </div>
+              <div>
+                <span class="step">03</span>
+                <p>
+                  <strong>Follow the work in real time</strong
+                  ><span>Live sessions and usage as reports arrive.</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="welcome-bottom">
+            <span>CLAUDE CODE</span><span>CODEX</span><span>MULTI-MACHINE</span
+            ><span>WEBSOCKET LIVE</span>
+          </div>
+        </section>
+        <div class="notice" id="notice" role="status" hidden></div>
+        <section id="dashboard" hidden aria-label="Live agent dashboard">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow" id="workspace">WORKSPACE / PERSONAL</div>
+              <h1>Mission control<span class="cursor">_</span></h1>
+              <p class="muted">
+                A live pulse of the work happening across your machines.
+              </p>
+            </div>
+            <div class="heading-actions">
+              <span class="period" id="period">TODAY</span
+              ><button class="button" id="refresh">↻ Refresh</button>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <article class="metric">
+              <div class="metric-label">LIVE SESSIONS <span>01</span></div>
+              <div class="metric-value" id="live-count">—</div>
+              <div class="metric-note" id="live-note">
+                Waiting for telemetry
+              </div>
+              <div class="metric-rule green-rule"></div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">TOKENS TODAY <span>02</span></div>
+              <div class="metric-value" id="token-count">—</div>
+              <div class="metric-note" id="token-note">Reported usage</div>
+              <div class="metric-rule blue-rule"></div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">ESTIMATED COST <span>03</span></div>
+              <div class="metric-value" id="cost-count">—</div>
+              <div class="metric-note" id="cost-note">
+                USD · collector pricing
+              </div>
+              <div class="metric-rule purple-rule"></div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">MACHINES ONLINE <span>04</span></div>
+              <div class="metric-value" id="machine-count">—</div>
+              <div class="metric-note" id="machine-note">Reporter health</div>
+              <div class="metric-rule orange-rule"></div>
+            </article>
+          </div>
+          <div class="main-grid">
+            <section class="panel sessions-panel">
+              <div class="panel-heading">
+                <h2>
+                  <span class="section-index">01 /</span> Active sessions
+                  <span class="count" id="session-count">0</span>
+                </h2>
+                <span class="micro muted">LIVE PROCESS EVIDENCE</span>
+              </div>
+              <div class="filters">
+                <div
+                  class="tabs"
+                  id="agent-tabs"
+                  role="group"
+                  aria-label="Filter agents"
+                >
+                  <button
+                    class="tab selected"
+                    data-agent="all"
+                    aria-pressed="true"
+                  >
+                    All agents</button
+                  ><button class="tab" data-agent="codex" aria-pressed="false">
+                    Codex</button
+                  ><button class="tab" data-agent="claude" aria-pressed="false">
+                    Claude
+                  </button>
+                </div>
+                <label class="search"
+                  ><span>⌕</span
+                  ><input
+                    id="search"
+                    type="search"
+                    placeholder="Filter project or machine…"
+                    aria-label="Filter sessions"
+                /></label>
+              </div>
+              <div id="sessions" class="sessions">
+                <div class="empty">Waiting for the first snapshot…</div>
+              </div>
+            </section>
+            <aside class="side-panels">
+              <section class="panel">
+                <div class="panel-heading">
+                  <h2>
+                    <span class="section-index">02 /</span> Usage by agent
+                  </h2>
+                  <span class="micro muted">TODAY</span>
+                </div>
+                <div id="agent-usage" class="agent-usage"></div>
+                <div class="panel-foot">
+                  Workspace totals deduplicate shared transcripts.
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-heading">
+                  <h2><span class="section-index">03 /</span> Machines</h2>
+                  <span class="micro muted" id="fleet-label">FLEET</span>
+                </div>
+                <div id="machines" class="machines"></div>
+              </section>
+            </aside>
+          </div>
+          <section class="panel activity-panel">
+            <div class="panel-heading">
+              <h2><span class="section-index">04 /</span> Signal log</h2>
+              <span class="micro muted">THIS BROWSER SESSION</span>
+            </div>
+            <div id="activity" class="activity" aria-live="off"></div>
+          </section>
+          <div class="coverage" id="coverage"></div>
+        </section>
+      </main>
+      <footer>
+        <span
+          ><span class="dot green"></span> BUILT FOR THE TERMINALLY
+          CURIOUS</span
+        ><span id="footer-status">LOCAL REPORTERS → CLOUDFLARE → YOU</span>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -15,17 +15,49 @@ export async function authenticate(
     request.headers.get("Authorization") || "",
   );
   if (!match) throw new HttpError(401, "invalid credentials");
-  const row = await env.DB.prepare(
-    `SELECT t.* FROM api_tokens t LEFT JOIN installations i ON i.workspace_id=t.workspace_id AND i.id=t.installation_id
-    WHERE t.id=? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>?) AND (t.installation_id IS NULL OR i.disabled_at IS NULL)`,
-  )
-    .bind(match[1], Date.now())
-    .first<Identity & { secret_hash: string }>();
+  const row = await lookup(env, match[1]);
   const digest = await hash(match[2]);
   const a = new TextEncoder().encode(digest),
     b = new TextEncoder().encode(row?.secret_hash || "0".repeat(64));
   if (!crypto.subtle.timingSafeEqual(a, b) || !row)
     throw new HttpError(401, "invalid credentials");
+  return authorize(env, row, scope);
+}
+type TokenRow = Identity & {
+  secret_hash: string;
+  parent_expiry: number | null;
+};
+async function lookup(env: Env, id: string) {
+  const now = Date.now();
+  return env.DB.prepare(
+    `SELECT t.*,p.expires_at AS parent_expiry FROM api_tokens t
+    LEFT JOIN installations i ON i.workspace_id=t.workspace_id AND i.id=t.installation_id
+    LEFT JOIN api_tokens p ON p.id=t.parent_token_id
+    LEFT JOIN installations pi ON pi.workspace_id=p.workspace_id AND pi.id=p.installation_id
+    WHERE t.id=? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>?)
+    AND (t.installation_id IS NULL OR (i.id IS NOT NULL AND i.disabled_at IS NULL))
+    AND (t.parent_token_id IS NULL OR (p.id IS NOT NULL AND p.workspace_id=t.workspace_id
+      AND p.revoked_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>?)
+      AND (p.installation_id IS NULL OR (pi.id IS NOT NULL AND pi.disabled_at IS NULL))))`,
+  )
+    .bind(id, now, now)
+    .first<TokenRow>();
+}
+// Only call after possession of an independently authenticated one-time ticket.
+export async function authenticateId(
+  env: Env,
+  id: string,
+  scope: string,
+): Promise<Identity> {
+  const row = await lookup(env, id);
+  if (!row) throw new HttpError(401, "invalid credentials");
+  return authorize(env, row, scope);
+}
+async function authorize(
+  env: Env,
+  row: TokenRow,
+  scope: string,
+): Promise<Identity> {
   if (row.scope !== scope) throw new HttpError(403, "insufficient scope");
   const rate = await env.DB.prepare(
     `INSERT INTO rate_limits(token_id,window,count) VALUES(?,?,1)
@@ -34,5 +66,14 @@ export async function authenticate(
     .bind(row.id, Math.floor(Date.now() / 60000))
     .first<{ count: number }>();
   if (rate && rate.count > 600) throw new HttpError(429, "rate limited");
-  return row;
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    installation_id: row.installation_id,
+    scope: row.scope,
+    expires_at:
+      row.parent_expiry == null
+        ? row.expires_at
+        : Math.min(row.expires_at ?? Infinity, row.parent_expiry),
+  };
 }

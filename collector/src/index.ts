@@ -1,3 +1,11 @@
+import {
+  createLink,
+  redeemLink,
+  createTicket,
+  consumeTicket,
+  logout,
+} from "./browser-auth";
+import { servePanel } from "./panel";
 import { authenticate } from "./auth";
 import { ingest, presence, usage } from "./ingest";
 import { body, HttpError, response, stamp, str } from "./protocol";
@@ -12,6 +20,35 @@ export default {
     try {
       const url = new URL(request.url),
         path = url.pathname;
+      if (!path.startsWith("/v1/")) return await servePanel(request, env);
+      if (request.method === "POST") {
+        if (path === "/v1/browser-links") return await createLink(request, env);
+        if (path === "/v1/browser-login") return await redeemLink(request, env);
+        if (path === "/v1/browser-ticket")
+          return await createTicket(request, env);
+        if (path === "/v1/browser-logout") return await logout(request, env);
+      }
+      if (path === "/v1/browser-subscribe" && request.method === "GET") {
+        if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
+          throw new HttpError(426, "WebSocket upgrade required");
+        const who = await consumeTicket(request, env);
+        const upgraded = await env.SUBSCRIPTIONS.getByName(
+          who.workspace_id,
+        ).fetch(
+          new Request("https://subscription/subscribe", {
+            headers: {
+              Upgrade: "websocket",
+              "X-Collector-Identity": JSON.stringify(who),
+            },
+          }),
+        );
+        if (upgraded.status !== 101) return upgraded;
+        return new Response(null, {
+          status: 101,
+          webSocket: upgraded.webSocket,
+          headers: { "Sec-WebSocket-Protocol": "ai-agents.v1" },
+        });
+      }
       const writing = request.method === "POST";
       const who = await authenticate(request, env, writing ? "write" : "read");
       if (writing) {

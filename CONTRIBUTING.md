@@ -53,3 +53,9 @@ All supplied checks run locally. The scripts do not register hooks in your perso
 agent configuration, enable reporting services, push commits, or deploy Cloudflare
 resources. Provisioning and development-server setup are explicit commands in the
 [collector guide](collector/README.md).
+
+
+For web-panel changes, also install and run the browser tests described in
+[`clients/web/README.md`](clients/web/README.md#develop-and-test). They start an
+isolated local Worker and produce desktop/mobile screenshots. Collector tests
+cover browser login, delegation, expiry, single-use races, and revocation.

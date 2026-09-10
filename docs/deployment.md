@@ -192,3 +192,38 @@ hook latency, 2.7 ms p95, 4,680 KiB daemon RSS, one thread, and no additional HT
 requests or measurable CPU time over a 35-second idle sample. After connecting to production, RSS across the four
 machines ranged from 5,760 to 6,260 KiB (about 5.6–6.1 MiB). See the
 [daemon guide](../reporters/rust/README.md) for timing, state bounds, and rollback.
+
+
+## Web panel and CLI rollout (2026-09-10)
+
+The shared systemd units and Linux guide were committed locally as `a3e5424`
+before beginning this feature. Applied `0010_browser_access.sql` to production
+D1, then deployed Worker version `d3483d5a-f936-4571-acd9-dc8a86bd790c` with its
+four static web assets. The public homepage is available on the custom domain
+and workers.dev hostname, with CLI login instructions.
+
+Updated the Rust binary on ArchDell, YogaArch, Karry, and Rain. `ai-agents status`
+now prints a readable summary; `status --json` retains machine-readable output.
+`ai-agents web --expires 10m` creates a single-use login link. Each remote copied
+installation now also includes the versioned `systemd/` assets beside `install.py`;
+all four services use the shared user unit and retain their existing proxy drop-ins.
+Rain remains Codex-only.
+
+Karry's proxy previously existed only in its systemd environment. Added the same
+proxy as `proxy_url` in its private reporter configuration so both CLI and daemon
+can use it; the previous file is `~/.config/ai-agents/config.json.before-web-proxy`.
+The shared HTTP client respects NO_PROXY exclusions. Verified link generation on
+all four machines. Short-lived verification links were allowed to expire.
+
+A live Chromium verification generated a link through the installed CLI, redeemed
+it, confirmed removal of the URL fragment, and received a live snapshot showing
+all four machines. Reload preserved browser access. Sign-out revoked that test
+browser credential and cleared localStorage. No JavaScript errors were observed.
+The verification used this machine's existing HTTPS proxy with normal TLS checks.
+
+Validation passed: collector type checks and 27 runtime tests, four Rust unit
+tests, 20 Rust-reporter/CLI/installer integration tests, 22 legacy reporter tests,
+ShellCheck, Lua/client checks, and five Chromium end-to-end tests. Browser tests
+cover live usage without idle polling, login persistence, consumed links, logout,
+metadata injection, filtering, mobile overflow, and outage recovery. Worker
+packaging dry-run also passed.

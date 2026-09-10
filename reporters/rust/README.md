@@ -121,13 +121,23 @@ or memory guarantees for large transcripts, proxy connections, or remote servers
 
 ```sh
 ~/.local/bin/ai-agents status
+~/.local/bin/ai-agents status --json
+~/.local/bin/ai-agents web --expires 10m
 ~/.local/bin/ai-agents reconcile  # wake a local scan now
 systemctl --user status ai-agents.service
 journalctl --user -u ai-agents.service
 ```
 
-`status` reports process identity, pending hooks, queued uploads, quarantine, and
-last scan health. `flush` also wakes reconciliation; neither command bypasses
+`status` prints a readable summary of process identity, pending hooks, uploads,
+quarantine, and last scan health. Use `--json` for scripts. Color is enabled only
+in a terminal and respects `NO_COLOR`. `web` creates a single-use login URL for
+the [web panel](../../clients/web/README.md); `--expires` accepts 60s–1h (default
+10m), and `--json` returns the URL and expiry timestamps. Browser access lasts up
+to 30 days and is tied to the originating write credential. Both the daemon and CLI support an optional `proxy_url` in the private
+`config.json`, for example `"proxy_url": "http://127.0.0.1:7890"`. It overrides
+automatic proxy discovery while retaining `NO_PROXY` exclusions. Without it,
+each process uses its own network/proxy environment. Restart the daemon after
+changing its configuration. `flush` also wakes reconciliation; neither command bypasses
 server backoff. Credentials are loaded on daemon startup; restart after rotation.
 
 ```sh
