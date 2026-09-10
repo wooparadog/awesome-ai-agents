@@ -123,6 +123,25 @@ three live sessions, zero stale/unverified sessions, complete usage coverage, an
 priced totals for both agents. All three reporter outboxes and quarantine queues
 were empty; recovered Claude warning markers were archived after acknowledgement.
 
+## Immediate background delivery
+
+On September 10, Desktop, `yoga-arch`, and `karry` were updated with
+`ai-agents-upload.path` and `ai-agents-upload.service`. Hooks now queue locally;
+the path watcher starts uploads immediately, using ten-second request timeouts
+and retrying pending work independently of the five-minute reconciliation timer.
+Existing proxy environment drop-ins are also installed for the uploader.
+
+A live Desktop hook returned in 0.093 seconds and its updated activity timestamp
+reached the running Yoga AwesomeWM client in 3.001 seconds. Token usage extraction
+remains on the five-minute reconciliation schedule. Reporter validation passed
+20 tests plus ShellCheck and systemd unit verification.
+
+On September 10, `rain` was added with its own installation-scoped write token,
+Codex-only hooks, immediate background delivery, and the reconciliation timer.
+Its reporter reaches the custom collector domain directly. The initial presence
+was visible in the Yoga client with usage capability enabled; an end-only hook
+probe confirmed the outbox drains through the background uploader.
+
 ## Verification
 
 The deployed service passed these checks:

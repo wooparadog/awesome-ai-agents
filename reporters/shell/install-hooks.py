@@ -117,10 +117,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--uninstall", action="store_true")
+    parser.add_argument("--agent", choices=("all", "claude", "codex"), default="all", help="register hooks only for the selected agent")
     parser.add_argument("--cloud-url", help="collector HTTPS URL (loopback HTTP for development)")
     parser.add_argument("--installation-id", help="installation associated with the write token")
     parser.add_argument("--token-file", help="path to a provisioned write token; never pass the token itself")
-    parser.add_argument("--timer", action="store_true", help="install and enable the user reconciliation timer")
+    parser.add_argument("--timer", action="store_true", help="install background delivery and the user reconciliation timer")
     parser.add_argument("--compat", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.compat:
@@ -149,6 +150,8 @@ def main():
         (CLAUDE_SETTINGS, "claude", CLAUDE_EVENTS, 5),
         (CODEX_HOOKS, "codex", CODEX_EVENTS, 3),
     ):
+        if args.agent not in ("all", agent):
+            continue
         try:
             config = load(path)
         except json.JSONDecodeError as exc:
@@ -159,30 +162,49 @@ def main():
 
     if args.timer:
         unit_dir = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "systemd/user")
-        names = ("ai-agents-reconcile.service", "ai-agents-reconcile.timer")
-        reporter = os.path.join(HERE, "reporter.sh").replace("%", "%%").replace('"', '\\"')
+        names = ("ai-agents-reconcile.service", "ai-agents-reconcile.timer", "ai-agents-upload.service", "ai-agents-upload.path")
+        def unit_value(value):
+            return value.replace("%", "%%").replace('\\', '\\\\').replace('"', '\\"')
+        reporter = unit_value(os.path.join(HERE, "reporter.sh"))
+        state_dir = os.environ.get("AI_AGENTS_STATE_DIR", os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "ai-agents"))
+        environment = (f'Environment="AI_AGENTS_CONFIG_DIR={unit_value(config_dir)}"\n'
+                       f'Environment="AI_AGENTS_STATE_DIR={unit_value(state_dir)}"\n')
         units = (
-            '[Unit]\nDescription=Report AI agent activity\n\n[Service]\nType=oneshot\n'
-            f'ExecStart="{reporter}" reconcile\nTimeoutStartSec=180\n',
+            '[Unit]\nDescription=Report AI agent activity\n\n[Service]\nType=oneshot\n' +
+            environment + f'ExecStart="{reporter}" reconcile\nTimeoutStartSec=180\n',
             '[Unit]\nDescription=Reconcile AI agent activity\n\n[Timer]\nOnBootSec=5min\n'
             'OnUnitInactiveSec=5min\nAccuracySec=1s\n\n[Install]\nWantedBy=timers.target\n',
+            '[Unit]\nDescription=Upload queued AI agent activity\nStartLimitIntervalSec=0\n\n'
+            '[Service]\nType=oneshot\n' + environment +
+            f'ExecStart="{reporter}" deliver\nTimeoutStartSec=180\nRestart=on-failure\nRestartSec=5\nUMask=0077\n',
+            '[Unit]\nDescription=Watch queued AI agent activity\n\n[Path]\n'
+            f'DirectoryNotEmpty={state_dir.replace("%", "%%")}/outbox\n'
+            f'PathExists={state_dir.replace("%", "%%")}/presence-pending\n'
+            'Unit=ai-agents-upload.service\nTriggerLimitIntervalSec=0\n\n[Install]\nWantedBy=default.target\n',
         )
         if args.dry_run:
             print("would " + ("remove" if args.uninstall else "install and enable") + " user reconciliation timer")
         elif args.uninstall:
-            subprocess.run(["systemctl", "--user", "disable", "--now", names[1]], check=True)
+            subprocess.run(["systemctl", "--user", "disable", "--now", names[1], names[3]], check=True)
+            subprocess.run(["systemctl", "--user", "stop", names[2]], check=True)
             for name in names:
                 path = os.path.join(unit_dir, name)
                 if os.path.exists(path):
                     os.remove(path)
             subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+            marker = os.path.join(config_dir, "background-upload")
+            if os.path.exists(marker):
+                os.remove(marker)
         else:
             os.makedirs(unit_dir, exist_ok=True)
+            os.makedirs(os.path.join(state_dir, "outbox"), exist_ok=True)
             for name, content in zip(names, units):
                 with open(os.path.join(unit_dir, name), "w") as fh:
                     fh.write(content)
             subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-            subprocess.run(["systemctl", "--user", "enable", "--now", names[1]], check=True)
+            subprocess.run(["systemctl", "--user", "enable", "--now", names[1], names[3]], check=True)
+            with open(os.path.join(config_dir, "background-upload"), "w") as fh:
+                fh.write("systemd path watcher enabled\n")
 
     if not args.uninstall:
         print(

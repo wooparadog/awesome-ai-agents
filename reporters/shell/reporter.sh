@@ -28,7 +28,10 @@ INSTALLATION=$(jq -er '.installation_id' "$CONFIG/config.json")
 case $URL in https://*|http://127.0.0.1:*|http://localhost:*) ;; *) error 'invalid collector URL' ;; esac
 MODE=$1
 exec 9>"$STATE/lock"
-if ! flock -w 0.3 9; then : > "$STATE/dropped.$(uuid)"; exit 0; fi
+if ! flock -w 0.3 9; then
+  [ "$MODE" != deliver ] || exit 75
+  : > "$STATE/dropped.$(uuid)"; exit 0
+fi
 trap 'rm -f "$STATE/request.$$" "$STATE/response.$$" "$STATE/response-headers.$$" "$STATE/header.$$"' EXIT HUP INT TERM
 BOOT=$(cat /proc/sys/kernel/random/boot_id)
 fingerprint() {
@@ -73,12 +76,22 @@ post() {
     --dump-header "$STATE/response-headers.$$" --output "$STATE/response.$$" --write-out '%{http_code}' "$URL$endpoint" 2>/dev/null) || result=000
   rm -f "$header"
 }
+schedule_retry() {
+  attempts=$(cat "$STATE/attempts" 2>/dev/null || printf '0'); attempts=$((attempts+1))
+  [ "$attempts" -le 6 ] || attempts=6
+  delay=$((2 << attempts))
+  retry=$(awk 'tolower($1)=="retry-after:" {gsub("\r", "", $2); print $2}' "$STATE/response-headers.$$" 2>/dev/null || true)
+  case $retry in ''|*[!0-9]*) ;; *) [ "$retry" -le 3600 ] || retry=3600; [ "$retry" -le "$delay" ] || delay=$retry ;; esac
+  jitter=$(od -An -N1 -tu1 /dev/urandom | tr -d ' ')
+  printf '%s' "$(( $(date +%s) + delay + jitter % 5 ))" > "$STATE/retry-at"
+  printf '%s' "$attempts" > "$STATE/attempts"
+}
 flush() {
   limit=$1; budget=$2
   deadline=$(( $(date +%s) + 90 ))
   flock -u 9
   exec 8>"$STATE/flush.lock"
-  flock -n 8 || return 0
+  flock -n 8 || { [ "$MODE" != deliver ] || exit 75; return 0; }
   [ ! -f "$STATE/retry-at" ] || [ "$(cat "$STATE/retry-at")" -le "$(date +%s)" ] || return 0
   sent=0
   for f in "$STATE"/outbox/*.json; do
@@ -95,20 +108,14 @@ flush() {
           ($request[0] | [(.events[]?.event_id),(.records[]?.native_record_id)] | all(.[]; . as $id | ($a|index($id))!=null))' "$STATE/response.$$" >/dev/null 2>&1; then
           printf '%s' "$(( $(date +%s) + 30 ))" > "$STATE/retry-at"; break
         fi
-        rm -f "$f" "$STATE/retry-at" "$STATE/attempts" ;;
+        rm -f "$f" "$STATE/retry-at" "$STATE/attempts"
+        [ "$MODE" != deliver ] || : > "$STATE/presence-pending" ;;
       400|403|410|413|415) mv "$f" "$STATE/quarantine/$(basename "$f")"; mark_dropped ;;
       409)
         if [ "$kind" = usage ] && jq -e '.error=="run not yet ingested"' "$STATE/response.$$" >/dev/null 2>&1; then continue; fi
         mv "$f" "$STATE/quarantine/$(basename "$f")"; mark_dropped ;;
       *)
-        attempts=$(cat "$STATE/attempts" 2>/dev/null || printf '0'); attempts=$((attempts+1))
-        [ "$attempts" -le 6 ] || attempts=6
-        delay=$((2 << attempts))
-        retry=$(awk 'tolower($1)=="retry-after:" {gsub("\r", "", $2); print $2}' "$STATE/response-headers.$$" 2>/dev/null || true)
-        case $retry in ''|*[!0-9]*) ;; *) [ "$retry" -le 3600 ] || retry=3600; [ "$retry" -le "$delay" ] || delay=$retry ;; esac
-        jitter=$(od -An -N1 -tu1 /dev/urandom | tr -d ' ')
-        printf '%s' "$(( $(date +%s) + delay + jitter % 5 ))" > "$STATE/retry-at"
-        printf '%s' "$attempts" > "$STATE/attempts"
+        schedule_retry
         break ;;
     esac
 
@@ -145,6 +152,8 @@ case $MODE in
     data=$(printf '%s' "$safe" | jq -c --argjson pid "$pid" '{cwd,model,source,pid:$pid,notification_type:(.notification_type//.notification_category)}')
     queue_event "$file" "$3" "$data"
     if [ "$3" = SessionEnd ]; then jq '.closed=true' "$file" | atomic "$file"; fi
+    # The systemd path watcher drains this durable queue outside hook timeouts.
+    [ ! -f "$CONFIG/background-upload" ] || exit 0
     # A hook can verify its own ancestor immediately; never replay this evidence.
     # Keep a private copy because flushing may read other queued runs first.
     hook_run=$(jq -c '{run_id,execution_id,sequence}' "$file")
@@ -159,6 +168,42 @@ case $MODE in
         '{schema_version:1,observed_at:$time,runs:[$run],usage:$usage,dropped:$dropped}' > "$STATE/request.$$"
       post /v1/presence "$STATE/request.$$" 1
     fi ;;
+  deliver)
+    [ ! -f "$STATE/retry-at" ] || [ "$(cat "$STATE/retry-at")" -le "$(date +%s)" ] || exit 75
+    prune; flush 64 10
+    if [ -f "$STATE/presence-pending" ]; then
+      # Observe processes now; queued events are never evidence of liveness.
+      flock -w 1 9 || exit 75
+      delivery_presence="$STATE/delivery-presence.$$"
+      : > "$delivery_presence"
+      delivery_observed=$(now)
+      for file in "$STATE"/runs/*.json; do
+        [ -f "$file" ] || continue
+        [ "$(jq -r '.closed//false' "$file")" = false ] || continue
+        pid=$(jq -r '.pid' "$file")
+        [ "$pid" -gt 0 ] || continue
+        [ "$(fingerprint "$pid" 2>/dev/null || true)" = "$(jq -r '.fingerprint' "$file")" ] || continue
+        jq '.sequence+=1' "$file" | atomic "$file"
+        jq -c '{run_id,execution_id,sequence}' "$file" >> "$delivery_presence"
+      done
+      flock -u 9
+      usage_ready=false; [ ! -f "$STATE/usage-ready" ] || usage_ready=true
+      [ "$(find "$STATE/outbox" -name '*.json' | wc -l)" -eq 0 ] || usage_ready=false
+      jq -sc --argjson time "$delivery_observed" --argjson usage "$usage_ready" --argjson dropped "$(find "$STATE" -maxdepth 1 -name 'dropped.*' | wc -l)" \
+        'range(0; ([length,1]|max);128) as $i | {schema_version:1,observed_at:$time,runs:.[$i:$i+128],usage:$usage,dropped:$dropped}' "$delivery_presence" > "$delivery_presence.batches"
+      delivered=true
+      while IFS= read -r batch; do
+        printf '%s' "$batch" > "$STATE/request.$$"
+        post /v1/presence "$STATE/request.$$" 10
+        [ "$result" = 200 ] || { schedule_retry; delivered=false; break; }
+      done < "$delivery_presence.batches"
+      rm -f "$delivery_presence" "$delivery_presence.batches"
+      [ "$delivered" != true ] || rm -f "$STATE/presence-pending"
+    fi
+    # systemd retries while work remains; flush still honors server Retry-After.
+    [ ! -f "$STATE/presence-pending" ] || exit 75
+    [ "$(find "$STATE/outbox" -name '*.json' | wc -l)" -eq 0 ] || exit 75
+    ;;
   flush) prune; flush 64 10 ;;
   status)
     jq -n --arg installation "$INSTALLATION" --argjson queued "$(find "$STATE/outbox" -name '*.json' | wc -l)" \

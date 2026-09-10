@@ -19,13 +19,20 @@ Use `http://127.0.0.1:8787` for a local collector. All other connections require
 HTTPS. The token file must match the installation configured on the server.
 The installer merges hook entries, preserves other tools' hooks, and backs up
 existing configuration. `--dry-run` previews changes without writing files.
-Reinstalling recognizes hook entries from the old repository layout.
+Reinstalling recognizes hook entries from the old repository layout. Add
+`--agent codex` or `--agent claude` to install or remove hooks for only that agent;
+the other agent’s configuration is left untouched.
 
-The optional `--timer` installs and enables a systemd user timer for reconciliation.
-Without it, reporting is driven by hooks, and pending events wait for a subsequent
-hook or a manual flush. Hooks also send a fresh process observation when their
-agent ancestor can be identified, so new sessions need not wait for the timer to
-become verified. Codex may ask you to trust the updated hook configuration.
+The optional `--timer` installs a systemd path watcher for immediate background
+uploads, plus the five-minute reconciliation timer. Hooks write events to the
+local outbox and return without network requests. The path watcher starts
+`ai-agents-upload.service` whenever queued work exists, including after login.
+The uploader drains events and sends freshly checked process presence so sessions
+can become verified immediately. It retries unfinished work after five seconds,
+honoring the longer retry delay recorded after network or server failures.
+Without these units, hooks retain the one-second direct upload fallback; queued
+work then waits for another hook or a manual flush. Codex may ask you to trust
+the updated hook configuration.
 
 To configure the reporter without the Python installer:
 
@@ -65,7 +72,16 @@ Windows and macOS are not supported by this reporter yet.
 Scheduled and manual flushes allow ten seconds per request and stop starting new
 requests after ninety seconds. Pending batches retain their IDs for retry. Coverage
 remains incomplete until the observed transcripts are caught up and the outbox is
-acknowledged. Hook uploads retain their shorter one-second request budgets.
+acknowledged. Background delivery uses the same ten-second request budget, outside
+the agent's hook timeout. Token usage still comes from five-minute reconciliation;
+the immediate uploader does not rescan transcripts.
+
+If network access requires a systemd `EnvironmentFile` or other proxy settings,
+configure both `ai-agents-reconcile.service` and `ai-agents-upload.service` with
+the same environment. The installer preserves their existing drop-ins.
+Inspect delivery with `journalctl --user -u ai-agents-upload.service` and
+`systemctl --user status ai-agents-upload.path`. The uploader exits when the
+queue and pending presence are acknowledged; idle machines make no extra requests.
 
 Reconciliation retries Codex transcript discovery if the file was not available
 when the hook fired, including archived sessions. Closed runs that never supplied

@@ -13,6 +13,41 @@ module=importlib.util.module_from_spec(spec)
 loader.exec_module(module)
 
 class InstallerTest(unittest.TestCase):
+    def test_codex_only_preserves_claude_settings(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            claude = root/'claude.json'
+            claude.write_text('{"existing":true}')
+            args = ['install-hooks.py', '--agent', 'codex', '--cloud-url', 'https://collector.example', '--installation-id', 'rain', '--token-file', str(root/'token')]
+            with patch.object(module.sys, 'argv', args), patch.object(module, 'CLAUDE_SETTINGS', str(claude)), patch.object(module, 'CODEX_HOOKS', str(root/'codex.json')), patch.object(module.subprocess, 'run'), redirect_stdout(io.StringIO()):
+                module.main()
+            self.assertEqual(claude.read_text(), '{"existing":true}')
+            self.assertTrue((root/'codex.json').exists())
+            self.assertEqual(list(root.glob('claude.json.bak.*')), [])
+
+    def test_background_units_preserve_custom_directories_and_uninstall(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = root/'custom config'
+            config.mkdir()
+            (config/'config.json').write_text('{}')
+            state = root/'custom state'
+            env = {'AI_AGENTS_CONFIG_DIR': str(config), 'AI_AGENTS_STATE_DIR': str(state), 'XDG_CONFIG_HOME': str(root/'xdg')}
+            with patch.dict(module.os.environ, env), patch.object(module, 'CLAUDE_SETTINGS', str(root/'claude.json')), patch.object(module, 'CODEX_HOOKS', str(root/'codex.json')), patch.object(module.subprocess, 'run') as run, redirect_stdout(io.StringIO()):
+                with patch.object(module.sys, 'argv', ['install-hooks.py', '--timer']):
+                    module.main()
+                unit = root/'xdg/systemd/user'
+                self.assertIn(' deliver\n', (unit/'ai-agents-upload.service').read_text())
+                self.assertIn('RestartSec=5', (unit/'ai-agents-upload.service').read_text())
+                self.assertIn(f'AI_AGENTS_CONFIG_DIR={config}', (unit/'ai-agents-upload.service').read_text())
+                self.assertIn(f'DirectoryNotEmpty={state}/outbox', (unit/'ai-agents-upload.path').read_text())
+                self.assertTrue((config/'background-upload').exists())
+                self.assertTrue(any('ai-agents-upload.path' in call.args[0] for call in run.call_args_list))
+                with patch.object(module.sys, 'argv', ['install-hooks.py', '--uninstall', '--timer']):
+                    module.main()
+                self.assertFalse((config/'background-upload').exists())
+                self.assertFalse((unit/'ai-agents-upload.path').exists())
+
     def test_component_installer_registers_component_hook_and_timer(self):
         self.check_installer_paths(False)
     def test_compatibility_installer_keeps_root_hook(self):

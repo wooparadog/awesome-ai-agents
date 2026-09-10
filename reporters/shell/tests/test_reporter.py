@@ -18,6 +18,9 @@ class ReporterTest(unittest.TestCase):
         self.requests = []
         self.status = 200
         self.usage_delay = 0
+        self.event_delay = 0
+        self.presence_status = None
+        self.retry_after = None
         test = self
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
@@ -25,7 +28,11 @@ class ReporterTest(unittest.TestCase):
                 test.requests.append((self.path, body))
                 if self.path == '/v1/usage':
                     time.sleep(test.usage_delay)
-                self.send_response(test.status)
+                if self.path == '/v1/events':
+                    time.sleep(test.event_delay)
+                self.send_response(test.presence_status if self.path == '/v1/presence' and test.presence_status else test.status)
+                if test.retry_after:
+                    self.send_header('Retry-After', str(test.retry_after))
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 accepted=[e['event_id'] for e in body.get('events',[])] + [r['native_record_id'] for r in body.get('records',[])]
@@ -84,6 +91,49 @@ class ReporterTest(unittest.TestCase):
         self.run_reporter('flush')
         self.assertEqual([body['events'][0] for path, body in self.requests if path == '/v1/events'][-1], first)
         self.assertEqual(len(list((self.dir/'state/outbox').glob('*.json'))), 0)
+
+    def test_background_delivery_drains_slow_events_without_blocking_hooks(self):
+        (self.dir/'config/background-upload').touch()
+        self.event_delay = 1.2
+        before = time.monotonic()
+        self.hook('UserPromptSubmit')
+        self.hook('Stop')
+        self.assertLess(time.monotonic()-before, 1)
+        self.assertEqual(self.requests, [])
+        self.run_reporter('deliver')
+        events = [body['events'][0] for path, body in self.requests if path == '/v1/events']
+        self.assertEqual([e['source_event'] for e in events], ['UserPromptSubmit', 'Stop'])
+        presence = [body for path, body in self.requests if path == '/v1/presence'][-1]
+        self.assertEqual(presence['runs'][0]['run_id'], events[-1]['run_id'])
+        self.assertGreater(presence['runs'][0]['sequence'], events[-1]['sequence'])
+        self.assertEqual(list((self.dir/'state/outbox').glob('*.json')), [])
+        self.assertFalse((self.dir/'state/presence-pending').exists())
+
+    def test_background_presence_failure_retries_without_replaying_liveness(self):
+        (self.dir/'config/background-upload').touch()
+        self.hook('UserPromptSubmit')
+        self.presence_status = 503
+        self.retry_after = 60
+        with self.assertRaises(subprocess.CalledProcessError) as failed:
+            self.run_reporter('deliver')
+        self.assertEqual(failed.exception.returncode, 75)
+        self.assertTrue((self.dir/'state/presence-pending').exists())
+        self.assertGreaterEqual(int((self.dir/'state/retry-at').read_text()), int(time.time())+59)
+        count = len(self.requests)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_reporter('deliver')
+        self.assertEqual(len(self.requests), count)
+        # The process exits during backoff: fresh observation must omit it.
+        runfile = next((self.dir/'state/runs').glob('*.json'))
+        run = json.loads(runfile.read_text())
+        run['fingerprint'] = 'different-process'
+        runfile.write_text(json.dumps(run))
+        (self.dir/'state/retry-at').unlink()
+        self.presence_status = 200
+        self.run_reporter('deliver')
+        self.assertEqual(self.requests[-1][1]['runs'], [])
+        self.assertEqual(sum(path == '/v1/events' for path, _ in self.requests), 1)
+        self.assertFalse((self.dir/'state/presence-pending').exists())
     def test_reconcile_usage_partial_tail_and_attention(self):
         transcript=self.dir/'transcript.jsonl'
         transcript.write_text('')
