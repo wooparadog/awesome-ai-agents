@@ -25,16 +25,22 @@ Local development and tests still use local storage unless remote operations are
 
 ## September 9 quota outage and statistics migration
 
-D1 exhausted its free daily row-read quota. The old usage query alone accounted
-for 4,631,006 reads across 263 executions in query insights. The optimized Worker
-above is deployed, but production database access is still blocked by the quota.
-It returns 503 with `database daily quota exhausted` and a reset-time `Retry-After`.
+D1 exhausted its free daily row-read quota on September 9. The old usage query
+alone accounted for 4,631,006 reads across 263 executions in query insights.
+Database access resumed after the September 10 reset, and the scheduled job
+applied migration `0009_compact_statistics.sql` at 08:01 Asia/Singapore.
 
-Migration `0009_compact_statistics.sql` and its restartable backfill are prepared
-for **September 10, 2026, 08:01 Asia/Singapore (00:01 UTC)**. A persistent one-time
-user timer on Desktop (`ArchDell`) will run after the quota reset, or when the
-machine next comes online. Failed attempts retry after five minutes. This changes
-no billing settings.
+The backfill initially failed because remote Wrangler `--file --json` uses the
+SQL import endpoint, which emits progress and returns an import summary rather
+than SELECT rows. `compact-usage.mjs` now uses `--command --json` with argument
+arrays. The repaired job completed at **10:13:58 Asia/Singapore**, reading 456,753
+rows and writing 11,534 rows for the one-time backfill. A repeat invocation
+confirmed initialization and exited without repeating the backfill.
+
+Authenticated snapshots return HTTP 200 on both collector domains, and the live
+AwesomeWM widget on `yoga-arch` reconnected. Direct production checks of today's
+global and active-session statistics queries read 3 and 5 rows respectively.
+The completed one-time timer is disabled. No billing settings were changed.
 
 The tested files are copied outside the working tree under:
 
@@ -50,8 +56,7 @@ systemctl --user status ai-agents-compact-statistics.timer
 journalctl --user -u ai-agents-compact-statistics.service
 ```
 
-Snapshots remain unavailable until the schema/backfill completes. Reporter queues
-retain pending records. After recovery, inspect `snapshot_read_cost` and
+Reporter queues retain pending records during outages. To monitor ongoing cost, inspect `snapshot_read_cost` and
 `usage_write_cost` in Worker logs and D1 query insights. The local 5,001-record
 benchmark measured four reads for statistics and ten for the full snapshot data
 batch. See [statistics design](statistics.md) for the seven-day detailed-data and

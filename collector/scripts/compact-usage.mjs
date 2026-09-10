@@ -2,8 +2,6 @@
 // One-time, restartable backfill. Uses the installed Wrangler and no embedded credentials.
 import { parseArgs } from "node:util";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dayBounds } from "../src/reporting-day.ts";
@@ -19,21 +17,21 @@ const { values } = parseArgs({
 if (!!values.local === !!values.remote)
   throw new Error("Specify exactly one of --local or --remote");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const temporary = mkdtempSync(resolve(tmpdir(), "ai-usage-backfill-"));
 const quote = (s) => "'" + s.replaceAll("'", "''") + "'";
 let metered = true;
 let reads = 0,
   writes = 0;
 function execute(sql) {
-  const path = resolve(temporary, "backfill.sql");
-  writeFileSync(path, sql, { mode: 0o600 });
+  // Remote --file uses the import API, which emits progress and omits SELECT
+  // rows. --command returns query results and metering as JSON. SQL contains
+  // only schema identifiers, workspace IDs and timestamps; no credentials.
   const args = [
     "d1",
     "execute",
     values.database,
     values.remote ? "--remote" : "--local",
-    "--file",
-    path,
+    "--command",
+    sql,
     "--json",
   ];
   if (values.config) args.push("--config", resolve(values.config));
@@ -58,7 +56,7 @@ function execute(sql) {
   }
   return result;
 }
-try {
+{
   const now = Date.now(),
     cutoff = now - 30 * 86400000;
   const existing = execute("SELECT ready FROM statistics_state WHERE id=1;")[0]
@@ -113,6 +111,4 @@ try {
       }),
     );
   }
-} finally {
-  rmSync(temporary, { recursive: true, force: true });
 }
