@@ -140,6 +140,18 @@ each process uses its own network/proxy environment. Restart the daemon after
 changing its configuration. `flush` also wakes reconciliation; neither command bypasses
 server backoff. Credentials are loaded on daemon startup; restart after rotation.
 
+Missing transcripts are identified in the daemon journal with
+`usage coverage incomplete:` followed by structured fields for the reason, agent,
+run ID, native session ID, closed/open state, and expected local transcript path.
+The daemon logs each missing-transcript issue once when it appears or changes,
+and logs when the transcript is found or the run leaves the retention window.
+Unchanged issues are not repeated every 30 seconds; restarting the daemon reports
+currently missing transcripts again. These diagnostics stay in the local journal.
+
+```sh
+journalctl --user -u ai-agents.service --grep='usage coverage'
+```
+
 ```sh
 cargo fmt --manifest-path reporters/rust/Cargo.toml --check
 cargo clippy --locked --manifest-path reporters/rust/Cargo.toml --all-targets -- -D warnings

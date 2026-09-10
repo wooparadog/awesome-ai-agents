@@ -260,6 +260,40 @@ class DaemonTest(unittest.TestCase):
         time.sleep(.15)
         self.assertEqual(len(self.requests),before)
 
+    def test_missing_transcript_logs_cause_once_and_reports_recovery(self):
+        transcript=self.dir/'missing "quoted".jsonl'
+        self.hook('SessionEnd',agent='claude',sid='missing-history',transcript_path=str(transcript))
+        self.start()
+        def diagnostics(prefix):
+            text=(self.dir/'daemon.log').read_text()
+            return [json.loads(line.split(': ',1)[1]) for line in text.split('\n')[:-1] if line.startswith(prefix+': ')]
+        self.wait(lambda:len(diagnostics('usage coverage incomplete'))==1)
+        first=diagnostics('usage coverage incomplete')[0]
+        self.assertEqual(first['reason'],'transcript_missing')
+        self.assertEqual(first['agent'],'claude')
+        self.assertEqual(first['native_session_id'],'missing-history')
+        self.assertTrue(first['closed'])
+        self.assertEqual(first['transcript'],str(transcript))
+        for _ in range(2):
+            self.command('reconcile')
+            time.sleep(.1)
+        self.assertEqual(diagnostics('usage coverage incomplete'),[first])
+        self.assertFalse((self.dir/'state/usage-ready').exists())
+        transcript.write_text('')
+        self.command('reconcile')
+        self.wait(lambda:len(diagnostics('usage coverage issue cleared'))==1)
+        self.assertEqual(diagnostics('usage coverage issue cleared')[0]['reason'],'transcript_found')
+        self.wait(lambda:(self.dir/'state/usage-ready').exists())
+        transcript.unlink()
+        self.command('reconcile')
+        self.wait(lambda:len(diagnostics('usage coverage incomplete'))==2)
+        self.assertEqual(diagnostics('usage coverage incomplete')[1],first)
+        runfile=next((self.dir/'state/runs').glob('*.json'))
+        old=time.time()-8*86400;os.utime(runfile,(old,old))
+        self.command('reconcile')
+        self.wait(lambda:len(diagnostics('usage coverage issue cleared'))==2)
+        self.assertEqual(diagnostics('usage coverage issue cleared')[1]['reason'],'outside_retention')
+
     def test_write_ahead_recovery(self):
         dest=self.dir/'state/history/test.json'
         source=self.dir/'state/inbox/committed.json';source.write_text('{}')

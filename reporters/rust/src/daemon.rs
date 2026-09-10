@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs::{self, File, OpenOptions},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
@@ -73,6 +73,7 @@ struct Engine {
     retry_at: u64,
     attempts: u32,
     single_batches: usize,
+    missing_transcripts: HashMap<String, Value>,
 }
 impl Engine {
     fn event(
@@ -196,6 +197,7 @@ impl Engine {
         };
         let mut run = store::read(&path)?;
         if run["closed"] == true && modified(&path) + HORIZON < store::now() {
+            self.clear_missing_transcript(&run, "outside_retention");
             return self.finish_scan();
         }
         if path.parent() == Some(self.paths.state.join("history").as_path())
@@ -228,6 +230,7 @@ impl Engine {
             }
         }
         if let Some(p) = transcript.filter(|p| p.is_file()) {
+            self.clear_missing_transcript(&run, "transcript_found");
             if run["asking"] == true
                 && hooks::live(&run)
                 && fs::metadata(&p)?.len() > run["attention_size"].as_u64().unwrap_or(0)
@@ -251,9 +254,41 @@ impl Engine {
                 self.scan_complete = false;
             }
         } else if !(run["closed"] == true && !run["transcript"].is_string()) {
-            self.scan_complete = false
+            self.scan_complete = false;
+            self.log_missing_transcript(&run);
+        } else {
+            self.clear_missing_transcript(&run, "closed_without_observed_transcript");
         }
         self.finish_scan()
+    }
+    fn log_missing_transcript(&mut self, run: &Value) {
+        let id = run["run_id"].as_str().unwrap_or("");
+        let diagnostic = json!({
+            "event": "usage_coverage_incomplete",
+            "reason": if run["transcript"].is_string() { "transcript_missing" } else { "transcript_not_discovered" },
+            "installation": self.installation,
+            "agent": run["agent"],
+            "run_id": run["run_id"],
+            "native_session_id": run["native_session_id"],
+            "closed": run["closed"].as_bool().unwrap_or(false),
+            "transcript": run["transcript"],
+        });
+        // Report the cause once per change, not at every reconciliation tick.
+        // JSON escaping keeps paths/session metadata on a single journal line.
+        if self.missing_transcripts.get(id) != Some(&diagnostic) {
+            eprintln!("usage coverage incomplete: {diagnostic}");
+            self.missing_transcripts.insert(id.to_owned(), diagnostic);
+        }
+    }
+    fn clear_missing_transcript(&mut self, run: &Value, reason: &str) {
+        if let Some(mut diagnostic) = self
+            .missing_transcripts
+            .remove(run["run_id"].as_str().unwrap_or(""))
+        {
+            diagnostic["event"] = json!("usage_coverage_issue_cleared");
+            diagnostic["reason"] = json!(reason);
+            eprintln!("usage coverage issue cleared: {diagnostic}");
+        }
     }
     fn finish_scan(&mut self) -> Result<()> {
         if self.scan.is_empty() {
@@ -614,6 +649,7 @@ pub async fn run(paths: Paths) -> Result<()> {
         retry_at,
         attempts,
         single_batches: 0,
+        missing_transcripts: HashMap::new(),
     };
     let (tx, mut rx) = mpsc::channel(1);
     let mut inflight = false;
