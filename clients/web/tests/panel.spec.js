@@ -103,6 +103,10 @@ test("login persists read access, strips secret, and receives live usage without
     ],
   });
   await expect(page.locator("#token-count")).toHaveText("20.5K");
+  await expect(page.locator("#cost-count")).toHaveText("≈ $0.25");
+  await expect(page.locator("#cost-note")).toHaveText(
+    "USD · estimated API token cost",
+  );
   await expect(page.locator("#sessions")).toContainText("awesome-ai-agents");
   await page.reload();
   await expect(page.locator("#token-count")).toHaveText("20.5K");
@@ -134,6 +138,40 @@ test("shows a useful error for consumed links and logout revokes the token", asy
   await page.goto(grant.url);
   await expect(page.locator("#notice")).toContainText("already used");
   await expect(page.locator("#dashboard")).toBeHidden();
+});
+test("hidden tabs make no background requests and catch up when visible", async ({
+  page,
+  request,
+}) => {
+  await login(page, request);
+  await expect(page.locator("#sessions")).toBeVisible();
+  await page.clock.install();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  const reads = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/v1/")) reads.push(r.url());
+  });
+  await page.clock.fastForward(30 * 60000);
+  expect(reads).toHaveLength(0);
+  await post(request, "/v1/events", {
+    events: [event({ data: { cwd: "/work/hidden-catchup" } })],
+  });
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.runFor(2000);
+  await expect(page.locator("#sessions")).toContainText("hidden-catchup");
+  expect(reads.some((url) => url.endsWith("/v1/snapshot"))).toBe(true);
 });
 test("renders diverse states safely, filters sessions, and fits phone screens", async ({
   page,

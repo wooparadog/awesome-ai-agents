@@ -12,6 +12,7 @@ import { body, HttpError, response, stamp, str } from "./protocol";
 import { snapshot } from "./snapshot";
 import { publishPending } from "./subscriptions";
 import { retain } from "./retention";
+import { reprice } from "./reprice";
 export { Subscriptions } from "./subscriptions";
 
 export default {
@@ -168,6 +169,7 @@ export default {
     }
   },
   async scheduled(_event, env, ctx) {
+    await reprice(env);
     ctx.waitUntil(publishPending(env));
     await retain(env);
   },

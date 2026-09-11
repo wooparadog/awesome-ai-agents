@@ -13,6 +13,21 @@ fn n(v: &Value, k: &str) -> u64 {
     v[k].as_u64().unwrap_or(0)
 }
 
+fn pricing_metadata(usage: &Value, response: &Value) -> Value {
+    let mut result = json!({});
+    for key in ["service_tier", "speed", "inference_geo", "billing_provider"] {
+        // Returned billing metadata takes precedence over request preferences.
+        let value = usage
+            .get(key)
+            .filter(|v| v.is_string())
+            .or_else(|| response.get(key));
+        if let Some(value) = value.filter(|v| v.is_string()) {
+            result[key] = value.clone();
+        }
+    }
+    result
+}
+
 // Preserve provider IDs and the shell reporter's cumulative ID serialization.
 // Content/tool text is never copied into records.
 pub fn parse(
@@ -45,7 +60,7 @@ pub fn parse(
             "delta",
             m["model"].clone(),
             u,
-            json!({"input":n(u,"input_tokens"),"output":n(u,"output_tokens"),"cache_read":n(u,"cache_read_input_tokens"),"cache_write_5m":u["cache_creation"]["ephemeral_5m_input_tokens"].as_u64().unwrap_or(n(u,"cache_creation_input_tokens")),"cache_write_1h":n(&u["cache_creation"],"ephemeral_1h_input_tokens")}),
+            json!({"input":n(u,"input_tokens"),"output":n(u,"output_tokens"),"cache_read":n(u,"cache_read_input_tokens"),"cache_write_5m":u["cache_creation"]["ephemeral_5m_input_tokens"].as_u64().unwrap_or(n(u,"cache_creation_input_tokens").saturating_sub(n(&u["cache_creation"],"ephemeral_1h_input_tokens"))),"cache_write_1h":n(&u["cache_creation"],"ephemeral_1h_input_tokens")}),
         )
     } else if agent == "codex"
         && line["type"] == "token_usage_record"
@@ -54,15 +69,24 @@ pub fn parse(
         let p = &line["payload"];
         let u = &p["usage"];
         let id = p["response_id"].as_str()?.to_owned();
+        let cached = u["cached_input_tokens"]
+            .as_u64()
+            .unwrap_or(n(&u["input_tokens_details"], "cached_tokens"));
+        let written = u["cache_write_input_tokens"]
+            .as_u64()
+            .unwrap_or(n(&u["input_tokens_details"], "cache_write_tokens"));
         (
             "openai",
             id,
             p["thread_id"].as_str().unwrap_or(sid).to_owned(),
             "responses-v1",
             "delta",
-            model.clone(),
+            p.get("model")
+                .filter(|m| m.is_string())
+                .unwrap_or(model)
+                .clone(),
             u,
-            json!({"input":n(u,"input_tokens").saturating_sub(n(u,"cached_input_tokens")).saturating_sub(n(u,"cache_write_input_tokens")),"output":n(u,"output_tokens"),"cache_read":n(u,"cached_input_tokens"),"cache_write_5m":n(u,"cache_write_input_tokens"),"cache_write_1h":0}),
+            json!({"input":n(u,"input_tokens").saturating_sub(cached).saturating_sub(written),"output":n(u,"output_tokens"),"cache_read":cached,"cache_write_5m":written,"cache_write_1h":0}),
         )
     } else if agent == "codex"
         && !responses
@@ -85,13 +109,24 @@ pub fn parse(
     } else {
         return None;
     };
-    let _ = u;
     if record_model == "<synthetic>" || line["timestamp"].is_null() {
         return None;
     }
-    Some(
-        json!({"agent":agent,"provider":provider,"run_id":rid,"native_record_id":id,"stream_id":stream,"counter_epoch":epoch,"model":record_model,"occurred_at":line["timestamp"],"measurement_kind":kind,"counters":counters}),
-    )
+    let mut record = json!({"agent":agent,"provider":provider,"run_id":rid,"native_record_id":id,"stream_id":stream,"counter_epoch":epoch,"model":record_model,"occurred_at":line["timestamp"],"measurement_kind":kind,"counters":counters});
+    if kind == "delta" {
+        let metadata = pricing_metadata(
+            u,
+            if agent == "claude" {
+                &line["message"]
+            } else {
+                &line["payload"]
+            },
+        );
+        if metadata.as_object().is_some_and(|m| !m.is_empty()) {
+            record["pricing"] = metadata;
+        }
+    }
+    Some(record)
 }
 pub fn discover(sid: &str) -> Option<PathBuf> {
     let home = std::env::var_os("CODEX_HOME")
@@ -137,7 +172,7 @@ pub fn collect(paths: &Paths, run: &Value, path: &Path) -> Result<(bool, bool)> 
         json!({"offset":0,"model":null})
     };
     let closed = run["closed"].as_bool().unwrap_or(false);
-    if closed && cursor["finalized"] == true {
+    if closed && cursor["finalized"] == true && cursor["version"].as_u64().unwrap_or(0) >= 3 {
         return Ok((true, false));
     }
     let mut file = File::open(path)?;
@@ -147,7 +182,7 @@ pub fn collect(paths: &Paths, run: &Value, path: &Path) -> Result<(bool, bool)> 
     let mut offset = cursor["offset"].as_u64().unwrap_or(0);
     if size < offset
         || cursor["inode"].as_str() != Some(&inode)
-        || (agent == "codex" && cursor["version"].as_u64().unwrap_or(0) < 2)
+        || cursor["version"].as_u64().unwrap_or(0) < 3
     {
         offset = 0;
         cursor = json!({"model":null,"mode":"cumulative"});
@@ -172,7 +207,7 @@ pub fn collect(paths: &Paths, run: &Value, path: &Path) -> Result<(bool, bool)> 
             cursor["offset"] = json!(offset + bytes.len() as u64);
             cursor["inode"] = json!(inode);
             cursor["discard"] = json!(true);
-            cursor["version"] = json!(2);
+            cursor["version"] = json!(3);
             store::write(&cursor_path, &cursor)?;
         }
         return Ok((
@@ -237,7 +272,7 @@ pub fn collect(paths: &Paths, run: &Value, path: &Path) -> Result<(bool, bool)> 
     let offset = offset + consumed as u64;
     store::write(
         &cursor_path,
-        &json!({"offset":offset,"model":model,"inode":inode,"mode":if responses{"responses"}else{"cumulative"},"version":2,"finalized":closed && offset>=size,"discard":false}),
+        &json!({"offset":offset,"model":model,"inode":inode,"mode":if responses{"responses"}else{"cumulative"},"version":3,"finalized":closed && offset>=size,"discard":false}),
     )?;
     Ok((offset >= size, more))
 }
@@ -258,6 +293,37 @@ fn queue(paths: &Paths, records: &[Value]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn response_billing_metadata_and_nested_cache_counters_are_preserved() {
+        let line = json!({"type":"token_usage_record","timestamp":"2026-09-11T00:00:00Z",
+            "payload":{"response_id":"r","model":"gpt-5.6-sol","service_tier":"fast",
+                "usage":{"input_tokens":300000,"output_tokens":1000,
+                    "input_tokens_details":{"cached_tokens":200000,"cache_write_tokens":10000}},
+                "content":"PRIVATE"}});
+        let record = parse(&line, "codex", "s", "run", &mut json!("gpt-5"), false).unwrap();
+        assert_eq!(record["model"], "gpt-5.6-sol");
+        assert_eq!(
+            record["counters"],
+            json!({"input":90000,"cache_read":200000,"cache_write_5m":10000,"cache_write_1h":0,"output":1000})
+        );
+        assert_eq!(record["pricing"], json!({"service_tier":"fast"}));
+        assert!(!record.to_string().contains("PRIVATE"));
+    }
+    #[test]
+    fn claude_cache_fallback_does_not_count_hour_writes_twice() {
+        let line = json!({"type":"assistant","timestamp":"2026-09-11T00:00:00Z",
+            "message":{"id":"msg","model":"claude-opus-5","usage":{
+                "input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":100,
+                "cache_creation":{"ephemeral_1h_input_tokens":60},
+                "service_tier":"standard","speed":"fast","inference_geo":"us"}}});
+        let record = parse(&line, "claude", "s", "r", &mut Value::Null, false).unwrap();
+        assert_eq!(record["counters"]["cache_write_5m"], 40);
+        assert_eq!(record["counters"]["cache_write_1h"], 60);
+        assert_eq!(
+            record["pricing"],
+            json!({"service_tier":"standard","speed":"fast","inference_geo":"us"})
+        );
+    }
     #[test]
     fn cumulative_identity_preserves_transcript_key_order() {
         let line:Value=serde_json::from_str(r#"{"type":"event_msg","timestamp":"2026-09-10T00:00:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":5,"input_tokens":100,"cached_input_tokens":20}}}}"#).unwrap();

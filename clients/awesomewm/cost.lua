@@ -482,14 +482,14 @@ function cost.for_transcript(path)
   local e = path and state.files[path]
   local bucket = e and e.days and e.days[day_key()]
   if not bucket then
-    return { tokens = 0, dollars = 0, model = e and e.model, priced = true }
+    return { tokens = 0, dollars = 0, model = e and e.model, priced = true, estimated = true }
   end
 
   -- `e.model` is the last model parsed out of the file, i.e. the one the session
   -- most recently ran. Deliberately not taken from the loop below: bucket.models
   -- is keyed by model, and pairs() order is arbitrary, so a session that used two
   -- models today would report whichever one happened to come out last.
-  local out = { tokens = 0, dollars = 0, model = e.model, priced = true }
+  local out = { tokens = 0, dollars = 0, model = e.model, priced = true, estimated = true }
   for model, counts in pairs(bucket.models) do
     local dollars, known = pricing.cost(model, counts)
     out.tokens = out.tokens + total_tokens(counts)
@@ -510,8 +510,8 @@ end
 function cost.totals()
   local today = day_key()
   local out = {
-    claude = { tokens = 0, dollars = 0, priced = true },
-    codex = { tokens = 0, dollars = 0, priced = true },
+    claude = { tokens = 0, dollars = 0, priced = true, estimated = true },
+    codex = { tokens = 0, dollars = 0, priced = true, estimated = true },
     scanning = scanning,
   }
 

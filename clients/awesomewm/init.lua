@@ -68,7 +68,12 @@ local function fmt_dollars(agg)
   if not agg or agg.dollars == 0 then
     return agg and not agg.priced and "cost n/a" or "$0.00"
   end
-  return string.format("$%.2f%s", agg.dollars, agg.priced and "" or "+")
+  return string.format(
+    "%s$%.2f%s",
+    agg.estimated == false and "" or "≈ ",
+    agg.dollars,
+    agg.priced and "" or " (partial)"
+  )
 end
 
 local function project_label(cwd)
@@ -191,7 +196,7 @@ local function popup_text(colors, snap)
 
   if grand > 0 then
     lines[#lines + 1] = ""
-    lines[#lines + 1] = string.format("<b>total today  $%.2f%s</b>", grand, priced and "" or "+")
+    lines[#lines + 1] = string.format("<b>total today  ≈ $%.2f%s</b>", grand, priced and "" or "+")
   end
   if totals.scanning then
     lines[#lines + 1] = string.format("<span foreground='%s'>(still reading today's transcripts…)</span>", colors.dim)

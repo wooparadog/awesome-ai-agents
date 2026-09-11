@@ -83,8 +83,11 @@ flowchart LR
   Only appended complete JSONL records are parsed. Backlogs are processed in
   1 MiB chunks with yields between runs; unusually long lines are bounded at
   16 MiB and diagnosed. Closed runs stop reading after their final complete scan.
-- Presence heartbeats go to the collector every five minutes and after activity
-  changes. Local scans send no request when nothing changes. Presence always checks
+- Presence is sent when live-run membership or coverage changes, and at most
+  once every five minutes for unchanged live processes. With no live processes,
+  the last acknowledged observation is persisted and unchanged scans/heartbeats
+  send nothing, including after a daemon restart. Failed requests still retry.
+  Presence always checks
   the process's current boot ID, PID, and start time; offline event replay cannot
   renew a dead process's lease.
 - Lifecycle batches contain at most 16 events; usage batches at most 64 records,

@@ -503,6 +503,7 @@ it("recovers durable pending notifications and coalesces an unacknowledged subsc
 
 it("prunes detailed usage while retaining compact totals and a cumulative baseline", async () => {
   const { retain } = await import("../src/retention");
+  const { reprice } = await import("../src/reprice");
   const w = "archive",
     now = Date.now(),
     old = now - 10 * 86400000;
@@ -538,6 +539,9 @@ it("prunes detailed usage while retaining compact totals and a cumulative baseli
         ...dayBounds(time, "Asia/Singapore"),
       )
       .run();
+  }
+  while (await reprice(env)) {
+    /* Upgrade old evidence before retention. */
   }
   await retain(env, now);
   await retain(env, now + 3600000);

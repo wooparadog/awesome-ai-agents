@@ -5,6 +5,7 @@ import { beforeAll, expect, it, vi } from "vitest";
 import { ingest, usage } from "../src/ingest";
 import { dayBounds, snapshot, statisticsQueries } from "../src/snapshot";
 import { retain } from "../src/retention";
+import { catalog, resolveRates } from "../src/pricing";
 import type { Identity } from "../src/auth";
 declare const TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
 beforeAll(async () => {
@@ -165,9 +166,30 @@ it("bounds statistic reads independently of detailed history size", async () => 
       batch.push(
         env.DB.prepare(
           `INSERT INTO usage_records(workspace_id,id,installation_id,agent,provider,native_record_id,stream_id,counter_epoch,model,
-        occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end)
-        VALUES(?,?,'machine','codex','openai',?,?,'responses-v1','gpt-6-astra',?,?,'delta',80,5,20,0,0,?,?,?)`,
-        ).bind(workspace, id, id, workspace, now, now, id, from, to),
+        occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end,resolved_rates,pricing_version)
+        VALUES(?,?,'machine','codex','openai',?,?,'responses-v1','gpt-6-astra',?,?,'delta',80,5,20,0,0,?,?,?,?,?)`,
+        ).bind(
+          workspace,
+          id,
+          id,
+          workspace,
+          now,
+          now,
+          id,
+          from,
+          to,
+          JSON.stringify(
+            resolveRates(
+              "openai",
+              "gpt-6-astra",
+              "delta",
+              { input: 80, output: 5, cache_read: 20 },
+              {},
+              now,
+            ),
+          ),
+          catalog.version,
+        ),
       );
       batch.push(
         env.DB.prepare(

@@ -13,7 +13,7 @@ All application endpoints require authentication; opening the URL without a toke
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
 | Database region | APAC |
 | Subscription class | `Subscriptions`, SQLite-backed, hibernating WebSockets |
-| Notification retry schedule | Every five minutes |
+| Notification recovery backstop | Hourly; normal publication is immediate |
 | Retention work | At most hourly, bounded indexed batches |
 | Machine reconciliation | At least five minutes between runs |
 | Presence freshness | Ten minutes |

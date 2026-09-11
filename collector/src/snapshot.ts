@@ -31,6 +31,7 @@ type Total = {
   tokens: number;
   dollars: number;
   priced: boolean;
+  estimated: boolean;
   available: boolean;
   complete: boolean;
   model?: string | null;
@@ -39,6 +40,7 @@ const empty = (): Total => ({
   tokens: 0,
   dollars: 0,
   priced: true,
+  estimated: false,
   available: false,
   complete: true,
 });
@@ -46,25 +48,31 @@ function add(dst: Total, row: UsageRow): bigint {
   const rates = row.rates
     ? (JSON.parse(row.rates) as Record<string, number>)
     : {};
-  let nano = 0n;
+  let pico = 0n;
+  dst.estimated = dst.estimated || rates._estimated !== 0;
   for (const metric of metrics) {
     const q = row[metric] || 0;
     dst.tokens += q;
     if (q && rates[metric] == null) dst.priced = false;
-    else nano += BigInt(q) * BigInt(rates[metric] || 0);
+    else
+      pico +=
+        BigInt(q) *
+        BigInt(rates[metric] || 0) *
+        (rates._unit === 1e12 ? 1n : 1000n);
   }
-  dst.dollars += Number(nano) / 1e9;
+  dst.dollars += Number(pico) / 1e12;
   dst.available = true;
   dst.complete = dst.complete && !row.incomplete;
   dst.model = row.model;
-  return nano;
+  return pico;
 }
 export function summarize(rows: unknown[]) {
-  const result: Record<string, Total & { nano: bigint }> = {};
+  const result: Record<string, Total & { nano: bigint; pico: bigint }> = {};
   for (const value of rows) {
     const row = value as UsageRow;
-    const total = (result[row.agent] ??= { ...empty(), nano: 0n });
-    total.nano += add(total, row);
+    const total = (result[row.agent] ??= { ...empty(), nano: 0n, pico: 0n });
+    total.pico += add(total, row);
+    total.nano = total.pico / 1000n;
   }
   return result;
 }
@@ -95,10 +103,14 @@ export async function snapshot(
 ) {
   const now = Date.now();
   const config = await env.DB.prepare(
-    "SELECT reporting_timezone,(SELECT ready FROM statistics_state WHERE id=1) AS ready FROM workspaces WHERE id=?",
+    "SELECT reporting_timezone,usage_reset_at,(SELECT ready FROM statistics_state WHERE id=1) AS ready FROM workspaces WHERE id=?",
   )
     .bind(workspace)
-    .first<{ reporting_timezone: string; ready: number }>();
+    .first<{
+      reporting_timezone: string;
+      usage_reset_at: number;
+      ready: number;
+    }>();
   if (!config) throw new HttpError(404, "workspace not found");
   if (!config.ready)
     throw new HttpError(503, "statistics migration in progress");
@@ -152,6 +164,7 @@ export async function snapshot(
     c.tokens += Number(r.tokens);
     c.dollars += Number(BigInt(String(r.nano_usd))) / 1e9;
     c.priced = c.priced && !!r.priced;
+    c.estimated = true; // Legacy archives have no per-request billing metadata.
     c.complete = c.complete && !!r.complete;
     c.available = true;
   }
@@ -240,5 +253,6 @@ export async function snapshot(
     cost,
     installations,
     usage_complete: complete,
+    usage_reset_at: config.usage_reset_at,
   };
 }
