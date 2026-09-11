@@ -227,3 +227,39 @@ ShellCheck, Lua/client checks, and five Chromium end-to-end tests. Browser tests
 cover live usage without idle polling, login persistence, consumed links, logout,
 metadata injection, filtering, mobile overflow, and outage recovery. Worker
 packaging dry-run also passed.
+
+
+## Pricing and idle workload rollout (2026-09-11)
+
+Deployed Worker version `fa3f752b-22b0-467d-8143-3a92226eac90` to
+`https://ai.wooparadog.info` with migrations `0013_accurate_pricing.sql` and
+`0014_idle_workload.sql`. The maintenance/recovery schedule is hourly. Empty idle
+reporters suppress repeated acknowledgements, presence publication is coalesced,
+and hidden browser tabs pause subscriptions. Live-process leases remain unchanged.
+The existing token-management functionality was preserved during deployment;
+its pre-existing working-tree changes are not part of the pricing/workload commit.
+
+Reset the `personal` workspace's telemetry at `1789100520357` milliseconds
+(2026-09-11 04:22:00.357 UTC). The transactional reset preserved credentials,
+installations and live run identities. Pre-reset usage replay is ignored.
+
+Updated and restarted the reporters on ArchDell, YogaArch and Karry. All three
+run the release binary with SHA-256
+`a0d6177dbf98185303f12f811205e1d93aeee695b65cb412a113aea47c9772c2`.
+The prior binary is retained as `~/.local/bin/ai-agents.before-pricing-idle-20260911`.
+Rain could not be resolved and Jackson's SSH connection timed out, so their
+reporter upgrades remain pending; rerun deployment when those hosts are reachable.
+
+The first migration attempt encountered the remote D1 parser's unparenthesized
+`SELECT CASE` limitation. The deployment command that followed was rolled back to
+`644a2382-3a20-4197-adb4-857bcfe9a20b`. After parenthesizing the expression and adding
+a regression check, both migrations succeeded remotely before the final deployment.
+The failed migration was verified to have rolled back its schema changes.
+
+Validation included 52 collector tests, 10 browser tests, 8 Rust unit tests,
+22 reporter integration tests, 25 shell tests, Clippy, formatting, release and
+Worker packaging checks, and 191 matching pricing-feed comparisons. The scoped
+commit separately passed 44 collector tests without unrelated token-management
+edits. The browser idle test advances thirty minutes while hidden and verifies
+no requests; the reporter idle test covers eight simulated hours plus restart
+and live-process renewal behavior.
