@@ -79,7 +79,11 @@ export function resolveRates(
     prompt > m.context_threshold;
   const selected = long ? prices.long : prices.short;
   if (!selected) return {}; // No published rate for this tier/context combination.
-  const geo = context.inference_geo || "global";
+  // Claude uses this sentinel when geographic billing information is absent.
+  // Preserve the raw evidence, but price it like missing metadata, as an estimate.
+  const unavailableGeo =
+    provider === "anthropic" && context.inference_geo === "not_available";
+  const geo = unavailableGeo ? "global" : context.inference_geo || "global";
   if (!["global", "us", "eu", "regional"].includes(geo)) return {};
   if (geo !== "global" && !m.regional) return {};
   if (provider === "anthropic" && !["global", "us"].includes(geo)) return {};
@@ -88,6 +92,7 @@ export function resolveRates(
   const verified = Date.parse(catalog.verified_at);
   const estimated =
     kind !== "delta" ||
+    unavailableGeo ||
     !context.service_tier ||
     !context.billing_provider ||
     (m.regional && !context.inference_geo) ||

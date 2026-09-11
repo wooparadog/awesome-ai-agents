@@ -214,7 +214,8 @@ export async function usage(env: Env, who: Identity, payload: Json) {
       "inference_geo",
       "billing_provider",
     ] as const) {
-      if (rawPricing[key] != null) pricing[key] = str(rawPricing[key], 64);
+      if (rawPricing[key] != null && rawPricing[key] !== "")
+        pricing[key] = str(rawPricing[key], 64);
     }
     const rates = resolveRates(
       provider,

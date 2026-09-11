@@ -184,6 +184,18 @@ it("does not treat unavailable prices, private tiers, or partner billing as free
   expect(total("gpt-5-pro", { cache_read: 1 }).priced).toBe(false);
   expect(total("gpt-5", { cache_write_5m: 1 }).priced).toBe(false);
 });
+it("treats Claude's not_available geography as missing metadata, preserving a priced estimate", () => {
+  const value = total(
+    "claude-fable-5-1",
+    { input: 32, output: 1163, cache_read: 140293, cache_write_1h: 1488 },
+    { ...direct, inference_geo: "not_available" },
+  );
+  expect(value).toMatchObject({ priced: true, estimated: true });
+  expect(value.dollars).toBeCloseTo(
+    (32 * 10 + 1163 * 50 + 140293 * 0.25 + 1488 * 20) / 1e6,
+    12,
+  );
+});
 it("marks missing metadata, cumulative usage, and historical price assumptions as estimates", () => {
   expect(total("gpt-6-astra", { input: 300000 }, {}).estimated).toBe(true);
   expect(
