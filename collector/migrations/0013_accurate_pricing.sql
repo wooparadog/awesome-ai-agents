@@ -39,10 +39,10 @@ WHEN NEW.archived=0 AND NEW.day_start IS NOT NULL AND OLD.resolved_rates IS NOT 
 END;
 -- Conflicting nonempty billing metadata must never silently replace evidence.
 CREATE TRIGGER pricing_validate BEFORE INSERT ON usage_records BEGIN
- SELECT CASE WHEN EXISTS(
+ SELECT (CASE WHEN EXISTS(
   SELECT 1 FROM usage_records existing, json_each(NEW.pricing_json) j
   WHERE existing.workspace_id=NEW.workspace_id AND existing.id=NEW.id
   AND json_extract(existing.pricing_json,'$.'||j.key) IS NOT NULL
   AND json_extract(existing.pricing_json,'$.'||j.key) IS NOT j.value
- ) THEN RAISE(ABORT,'usage conflict') END;
+ ) THEN RAISE(ABORT,'usage conflict') END);
 END;

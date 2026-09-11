@@ -583,6 +583,10 @@ it("keeps migration DDL separate for D1's remote SQL splitter", () => {
           /\bCREATE\s+(?:TABLE|VIEW|TRIGGER|(?:UNIQUE\s+)?INDEX)\b/gi,
         ) || [];
       expect(declarations.length, migration.name).toBeLessThanOrEqual(1);
+      // The remote D1 query parser also splits unparenthesized SELECT CASE
+      // inside triggers, even when the local Wrangler splitter keeps it whole.
+      if (/^CREATE\s+TRIGGER/i.test(query.trim()))
+        expect(query, migration.name).not.toMatch(/\bSELECT\s+CASE\b/i);
     }
   }
 });
