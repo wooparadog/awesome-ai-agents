@@ -263,3 +263,13 @@ commit separately passed 44 collector tests without unrelated token-management
 edits. The browser idle test advances thirty minutes while hidden and verifies
 no requests; the reporter idle test covers eight simulated hours plus restart
 and live-process renewal behavior.
+
+
+Follow-up deployment `9f62603f-947c-46f2-bfb3-378c70228c99` adds handling for
+Claude's `inference_geo: "not_available"` sentinel, observed during live validation.
+Migration `0015_unavailable_inference_geo.sql` queues the affected retained records
+for standard/global estimated pricing while preserving the raw metadata. Final
+collector validation passed 53 tests. No reporter binary change was required.
+One closed Claude session on ArchDell has a missing local transcript; it continues
+to mark usage coverage incomplete. Reporter uploads themselves had no errors or
+quarantined records after the rollout.

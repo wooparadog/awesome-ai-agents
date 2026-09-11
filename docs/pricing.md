@@ -39,7 +39,9 @@ separate flag: it is true when billing metadata is incomplete, usage is cumulati
 or a current price snapshot is being applied outside its verification window
 (before verification or more than 30 days afterward). Missing metadata assumes
 standard, global, direct API pricing and marks the result estimated. Unknown
-explicit metadata does not silently fall back to standard pricing.
+explicit metadata does not silently fall back to standard pricing. Claude's
+`inference_geo: "not_available"` sentinel and blank optional fields mean missing
+metadata, so they retain a clearly marked standard/global estimate.
 
 Clients display `≈` for estimates and label partial costs. Fully unpriced usage
 does not display a misleading zero-dollar charge. Even when `estimated=false`,
