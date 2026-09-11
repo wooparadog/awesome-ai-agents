@@ -43,6 +43,18 @@ async function lookup(env: Env, id: string) {
     .bind(id, now, now)
     .first<TokenRow>();
 }
+// A previously authenticated WebSocket uses this only before publishing another
+// invalidation. Idle connections need no periodic HTTP reconnect or D1 query.
+export async function subscriptionIdentity(env: Env, id: string) {
+  const row = await lookup(env, id);
+  if (!row || row.scope !== "read") return null;
+  return {
+    expires_at: Math.min(
+      row.expires_at ?? Infinity,
+      row.parent_expiry ?? Infinity,
+    ),
+  };
+}
 // Only call after possession of an independently authenticated one-time ticket.
 export async function authenticateId(
   env: Env,

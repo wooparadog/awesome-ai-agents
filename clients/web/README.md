@@ -36,7 +36,7 @@ credentials. Existing operator read tokens keep their previous behavior.
 The browser creates a 60-second, single-use connection ticket with its read token,
 then sends the ticket in the WebSocket subprotocol header. No persistent token or
 connection ticket goes in a WebSocket URL. The subscription uses the collector's
-existing revision notifications, acknowledgements, five-minute authorization
+existing revision notifications, acknowledgements, on-demand authorization
 lease, and automatic ping/pong replies.
 
 Snapshots are fetched after subscription, on changed revisions, at freshness/day

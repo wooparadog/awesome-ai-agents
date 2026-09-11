@@ -134,6 +134,17 @@ class ReporterTest(unittest.TestCase):
         self.assertEqual(self.requests[-1][1]['runs'], [])
         self.assertEqual(sum(path == '/v1/events' for path, _ in self.requests), 1)
         self.assertFalse((self.dir/'state/presence-pending').exists())
+    def test_empty_reconciliation_sends_only_changed_coverage(self):
+        self.run_reporter('reconcile')
+        count=len(self.requests)
+        self.assertEqual(count,1)
+        for _ in range(3): self.run_reporter('reconcile')
+        self.assertEqual(len(self.requests),count)
+        (self.dir/'state/dropped.test').touch()
+        self.run_reporter('reconcile')
+        self.assertEqual(len(self.requests),count+1)
+        self.assertEqual(self.requests[-1][1]['dropped'],1)
+
     def test_reconcile_usage_partial_tail_and_attention(self):
         transcript=self.dir/'transcript.jsonl'
         transcript.write_text('')

@@ -112,7 +112,7 @@ path describes the reporting installation and must never be interpreted as a
 process or path on the viewing machine.
 
 The Rust reporter checks local processes and transcripts every 30 seconds and
-reports idle presence every five minutes. Local checks alone make no HTTP request.
+renews presence every five minutes only while live processes remain. Local checks alone make no HTTP request.
 The collector allows ten minutes of presence freshness before marking a run stale. This lease
 is separate from the two-minute maximum age accepted for a newly submitted presence observation.
 Hooks can submit a fresh observation of their own identified agent process without
@@ -123,7 +123,11 @@ Snapshot runs are current; ended runs are available in history. Freshness is a
 separate value: `live`, `stale`, or `unverified`. Lack of recent activity does not
 mean the process ended. Never turn a network failure into an empty snapshot.
 
-Usage totals contain `tokens`, `dollars`, `priced`, `available`, and `complete`.
+Usage totals contain `tokens`, `dollars`, `priced`, `estimated`, `available`, and `complete`.
+`estimated` marks assumed billing details or historical/current-rate estimates;
+it is independent of whether every token metric has a known rate (`priced`).
+Display estimates with `≈`, partial costs as partial, and wholly unpriced usage
+as unavailable rather than zero. Do not describe estimated totals as lower bounds.
 Unavailable usage is not zero. Unpriced models can still have known token counts;
 dollar totals can be partial estimates. Use the server's totals, which account for
 copied transcripts and cumulative counters; summing run totals can double-count
@@ -177,8 +181,8 @@ once, and no durable per-client replay cursor is promised. HTTP ingestion succes
 means the state and pending notification committed; the signal may arrive later.
 Failed snapshot requests need independent retries even if the socket stays healthy.
 
-Subscriptions have an authorization lease of at most five minutes, shortened by
-token expiry. Code `4001` requests reauthentication; reconnect using the current
+Subscriptions last at most one day, shortened by token expiry, and revalidate
+authorization before new broadcasts when the five-minute authorization cache expires. Code `4001` requests reauthentication; reconnect using the current
 credential. Code `4003` indicates revocation when explicitly closed. Other close
 or connection errors require recovery; repeated authentication failures should be
 surfaced without an aggressive retry loop. An HTTP read always revalidates the token.
@@ -253,6 +257,13 @@ and per-response deltas. These supersede legacy cumulative estimates from the fi
 exact response onward, so upgrades replay the transcript from the beginning. Delta input excludes
 both cached reads and cache writes, which have their own counters.
 
+Optional usage `pricing` metadata includes returned `service_tier`, `speed`,
+`inference_geo`, and `billing_provider` strings (up to 64 characters each). Missing
+fields are unknown; do not manufacture standard-tier evidence from request
+preferences. Metadata is independent of token identity and can enrich retained
+records on replay, but contradictory nonempty fields return 409. See
+[token pricing](pricing.md) for supported combinations and repricing behavior.
+
 Successful event/usage responses contain an `accepted` array of event IDs or native
 usage record IDs, respectively. Remove outbox items only after acknowledgement.
 Usage records older than seven days also appear in `ignored`: they are acknowledged
@@ -281,3 +292,23 @@ Consumers should tolerate additive response fields and new agent/model names.
 Unknown WebSocket message types can be ignored; unsupported protocol versions must
 be surfaced. Changes to the established identity, usage, authorization, or state
 semantics require compatibility review and, when breaking, a new protocol version.
+
+## Idle operation and telemetry resets
+
+Reporters may stop sending unchanged presence when no verified live processes
+remain. Coverage and process-set changes still send an update, and live processes
+keep the five-minute heartbeat/ten-minute freshness lease. Silence never proves
+liveness: installations naturally become stale after their last contact.
+
+Presence batches publish one revision, including empty-run coverage changes.
+Identical timestamp/sequence retries do not extend leases or publish again.
+Idle WebSockets can stay open for up to one day, bounded by credential expiry.
+Before publishing after five minutes without an authorization check, the server
+revalidates the token, parent, and installation. Revocation APIs still close their
+subscribers promptly. Ping/pong auto-responses do not invoke application code.
+Hidden browser tabs disconnect and fetch a fresh snapshot after resubscribing.
+
+Snapshots include `usage_reset_at` (milliseconds, zero before any reset). Counts
+on the reset day cover only usage since that timestamp. Telemetry reset preserves
+live session identities, configuration and credentials. Older queued usage is
+acknowledged as ignored, so it cannot restore deliberately deleted totals.

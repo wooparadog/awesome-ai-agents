@@ -9,7 +9,7 @@ and fetches snapshots only when needed. The HTTP API is independent of any parti
 The collector is deployed at [ai-agents-collector.stdimg.workers.dev](https://ai-agents-collector.stdimg.workers.dev).
 All application routes require a token; an unauthenticated request returns 401.
 The configured D1 database is `ai-agents` in APAC, and the scheduled maintenance
-trigger runs every minute. See [deployment details](../docs/deployment.md).
+trigger runs hourly. See [deployment details](../docs/deployment.md).
 
 ## Local development
 
@@ -33,7 +33,8 @@ it only generates files; no database changes occur. Each reporter needs its own
 installation and write credential. Widgets use read credentials. The provisioner
 can generate revocation SQL with `--revoke TOKEN_ID --workspace personal --output DIR`;
 add `--local` to apply to local D1. Revoked credentials immediately fail HTTP reads;
-existing subscriptions expire within five minutes and must reauthenticate.
+existing subscriptions are closed by revocation APIs and revalidated before new
+invalidations after the five-minute authorization cache expires.
 
 `wrangler.jsonc` now identifies the deployed account and D1 database. `pnpm dev`
 and `pnpm migrate:local` still use local storage. Remote database operations require
@@ -58,10 +59,12 @@ token collection incomplete. Codex response records supersede cumulative estimat
 for the same thread while retaining the original evidence. Apply all migrations
 before updating reporters; their first reconciliation replays Codex transcripts.
 
-GPT-6 Astra costs use the [published standard API rates](https://developers.openai.com/api/docs/models/gpt-6-astra),
-verified September 9, 2026: $10 input, $1 cached input, $12.50 cache writes, and $50
-output per million tokens. These are API cost estimates; Codex subscription billing,
-fast mode, and long-context premiums are not inferred from the collected counters.
+Token costs use the reviewed September 11, 2026 pricing catalog, including
+per-request context tiers, cache writes, supported Fast/Batch/Flex rates, and
+regional uplifts. Missing billing details remain marked estimated; unsupported
+rates remain unpriced. These are API token costs, not subscription invoices.
+See [pricing and repricing](../docs/pricing.md) for the metadata contract,
+migration, retained-history rebuild, and price audit commands.
 
 Future Windows and macOS clients use the same [public protocol](../docs/client-protocol.md).
 They do not need to copy the AwesomeWM implementation or the Linux process helpers.
@@ -169,3 +172,29 @@ The [web guide](../clients/web/README.md) documents login, expiry/revocation,
 local development origin configuration, and browser tests. The unauthenticated
 homepage is available even when D1 is unavailable; private snapshots continue
 to return their existing explicit quota/migration errors.
+
+## Idle workload
+
+Maintenance/recovery cron runs hourly. Normal event/usage/presence writes publish
+immediately; delivered outbox rows are excluded by an index. Subscription objects
+skip storage/alarm work with no listeners. Idle viewer connections hibernate and
+revalidate authorization before sending new invalidations when their cached check
+expires. Presence revisions are coalesced once per batch. Browser tabs pause while
+hidden and catch up on return.
+
+Reporters send no repeated empty heartbeat after acknowledgement. Live processes
+still renew their ten-minute lease every five minutes; suppressing those renewals
+would misrepresent liveness. Unacknowledged data and changed coverage still upload.
+Cron is a recovery backstop, not the normal publication path. Failed Durable Object
+broadcasts use persisted backoff, avoiding one-second retry storms during outages.
+
+To deliberately clear a workspace's collected telemetry after migration `0014`:
+
+```sh
+node scripts/reset-telemetry.mjs --remote --workspace WORKSPACE_ID
+```
+
+The reset is transactional. It preserves credentials, installations, live runs,
+and execution identities, advances a usage replay watermark, clears detailed
+records and totals, and publishes a new revision. Historical usage queued before
+that watermark is acknowledged without restoring deleted costs.

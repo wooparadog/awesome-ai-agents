@@ -503,6 +503,7 @@ it("recovers durable pending notifications and coalesces an unacknowledged subsc
 
 it("prunes detailed usage while retaining compact totals and a cumulative baseline", async () => {
   const { retain } = await import("../src/retention");
+  const { reprice } = await import("../src/reprice");
   const w = "archive",
     now = Date.now(),
     old = now - 10 * 86400000;
@@ -538,6 +539,9 @@ it("prunes detailed usage while retaining compact totals and a cumulative baseli
         ...dayBounds(time, "Asia/Singapore"),
       )
       .run();
+  }
+  while (await reprice(env)) {
+    /* Upgrade old evidence before retention. */
   }
   await retain(env, now);
   await retain(env, now + 3600000);
@@ -579,6 +583,10 @@ it("keeps migration DDL separate for D1's remote SQL splitter", () => {
           /\bCREATE\s+(?:TABLE|VIEW|TRIGGER|(?:UNIQUE\s+)?INDEX)\b/gi,
         ) || [];
       expect(declarations.length, migration.name).toBeLessThanOrEqual(1);
+      // The remote D1 query parser also splits unparenthesized SELECT CASE
+      // inside triggers, even when the local Wrangler splitter keeps it whole.
+      if (/^CREATE\s+TRIGGER/i.test(query.trim()))
+        expect(query, migration.name).not.toMatch(/\bSELECT\s+CASE\b/i);
     }
   }
 });

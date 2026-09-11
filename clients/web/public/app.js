@@ -86,8 +86,10 @@ function displayName(agent) {
       : agent;
 }
 function cost(usage) {
+  if (usage?.available && !usage.priced && !usage.dollars && usage.tokens)
+    return "unpriced";
   return usage?.available
-    ? `${usage.priced ? "" : "≥ "}${money.format(usage.dollars || 0)}`
+    ? `${usage.priced && usage.estimated === false ? "" : "≈ "}${money.format(usage.dollars || 0)}`
     : "n/a";
 }
 function updateView() {
@@ -100,6 +102,7 @@ function updateView() {
   const tokens = totals.reduce((n, c) => n + c.tokens, 0);
   const dollars = totals.reduce((n, c) => n + c.dollars, 0);
   const priced = totals.every((c) => c.priced);
+  const estimated = totals.some((c) => c.estimated !== false);
   const online = snapshot.installations.filter(
     (i) => i.last_contact_at > serverNow() - 600000,
   );
@@ -111,14 +114,18 @@ function updateView() {
     ? `${integer.format(tokens)} reported tokens`
     : "No usage reported yet";
   $("token-note").textContent = totals.length
-    ? `${integer.format(tokens)} tokens reported`
+    ? `${integer.format(tokens)} tokens ${snapshot.usage_reset_at > snapshot.from ? "since reset" : "reported"}`
     : "Awaiting usage reports";
   $("cost-count").textContent = totals.length
-    ? `${priced ? "" : "≥ "}${money.format(dollars)}`
+    ? !priced && !dollars && tokens
+      ? "unpriced"
+      : `${priced && !estimated ? "" : "≈ "}${money.format(dollars)}`
     : "n/a";
-  $("cost-note").textContent = priced
-    ? "USD · collector pricing"
-    : "USD · some usage is unpriced";
+  $("cost-note").textContent = !priced
+    ? "USD · partial token estimate"
+    : estimated
+      ? "USD · estimated API token cost"
+      : "USD · API token cost";
   $("machine-count").textContent =
     `${online.length.toString().padStart(2, "0")} / ${snapshot.installations.length.toString().padStart(2, "0")}`;
   $("machine-note").textContent =
@@ -372,7 +379,7 @@ function authFailure(error) {
   return false;
 }
 function scheduleRefresh(delay = 120) {
-  if (!auth) return;
+  if (!auth || document.hidden) return;
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(
     refresh,
@@ -380,7 +387,7 @@ function scheduleRefresh(delay = 120) {
   );
 }
 async function refresh() {
-  if (!auth || fetching) return;
+  if (!auth || fetching || document.hidden) return;
   if (Date.now() < retryAt) {
     scheduleRefresh();
     return;
@@ -459,12 +466,12 @@ async function refresh() {
   }
 }
 function reconnect(delay) {
-  if (!auth) return;
+  if (!auth || document.hidden) return;
   clearTimeout(reconnectTimer);
   reconnectTimer = setTimeout(connect, Math.max(delay, retryAt - Date.now()));
 }
 async function connect() {
-  if (!auth) return;
+  if (!auth || document.hidden) return;
   if (auth.expires_at <= Date.now()) {
     forget("Browser access expired. Generate a new link with ai-agents web.");
     return;
@@ -473,14 +480,14 @@ async function connect() {
   connection("connecting", attempts ? "RECONNECTING" : "CONNECTING");
   try {
     const { ticket } = await api("/v1/browser-ticket", {});
-    if (current !== epoch) return;
+    if (current !== epoch || document.hidden) return;
     const url = new URL("/v1/browser-subscribe", location.href);
     url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(url, ["ai-agents.v1", "ticket." + ticket]);
     socket = ws;
     watchdogTimer = setTimeout(() => ws.close(), 10000);
     ws.onmessage = (event) => {
-      if (current !== epoch) return;
+      if (current !== epoch || socket !== ws) return;
       if (event.data === "pong") {
         receivedPong = Date.now();
         return;
@@ -516,7 +523,7 @@ async function connect() {
     };
     ws.onerror = () => ws.close();
     ws.onclose = () => {
-      if (current !== epoch) return;
+      if (current !== epoch || socket !== ws) return;
       clearTimeout(watchdogTimer);
       clearInterval(heartbeatTimer);
       socket = null;
@@ -599,9 +606,21 @@ addEventListener("storage", (event) => {
     forget("Signed out in another tab.");
 });
 addEventListener("visibilitychange", () => {
-  if (!document.hidden && auth) {
+  if (document.hidden) {
+    clearTimeout(refreshTimer);
+    clearTimeout(reconnectTimer);
+    clearTimeout(watchdogTimer);
+    clearInterval(heartbeatTimer);
+    const old = socket;
+    socket = null;
+    old?.close();
+    if (auth) connection("offline", "PAUSED WHILE HIDDEN");
+  } else if (auth) {
     updateView();
-    scheduleRefresh(0);
+    // Subscribe first, then fetch a new snapshot: revisions changed while hidden
+    // must not be lost between a snapshot read and connection establishment.
+    if (!socket) reconnect(0);
+    else scheduleRefresh(0);
   }
 });
 async function boot() {

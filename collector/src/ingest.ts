@@ -1,5 +1,6 @@
 import type { Identity } from "./auth";
 import { dayBounds } from "./snapshot";
+import { catalog, resolveRates, type PricingContext } from "./pricing";
 import {
   hash,
   HttpError,
@@ -117,7 +118,8 @@ export async function presence(env: Env, who: Identity, payload: Json) {
   }
   statements.push(
     env.DB.prepare(
-      "UPDATE installations SET last_contact_at=?,capabilities_json=? WHERE workspace_id=? AND id=?",
+      `UPDATE installations SET last_contact_at=?,capabilities_json=?,hostname=COALESCE(?,hostname),presence_observed_at=?
+       WHERE workspace_id=? AND id=? AND (presence_observed_at IS NULL OR presence_observed_at<?)`,
     ).bind(
       now,
       JSON.stringify({
@@ -125,8 +127,23 @@ export async function presence(env: Env, who: Identity, payload: Json) {
         usage: payload.usage === true,
         dropped: integer(payload.dropped ?? 0),
       }),
+      optional(payload.hostname, 253),
+      time,
       who.workspace_id,
       who.installation_id,
+      time,
+    ),
+    env.DB.prepare(
+      `UPDATE workspaces SET revision=revision+1 WHERE id=?
+      AND EXISTS(SELECT 1 FROM presence_dirty WHERE workspace_id=?)`,
+    ).bind(who.workspace_id, who.workspace_id),
+    env.DB.prepare(
+      `INSERT INTO notification_outbox(workspace_id,pending_revision)
+      SELECT id,revision FROM workspaces WHERE id=? AND EXISTS(SELECT 1 FROM presence_dirty WHERE workspace_id=?)
+      ON CONFLICT(workspace_id) DO UPDATE SET pending_revision=excluded.pending_revision,next_attempt_at=0`,
+    ).bind(who.workspace_id, who.workspace_id),
+    env.DB.prepare("DELETE FROM presence_dirty WHERE workspace_id=?").bind(
+      who.workspace_id,
     ),
   );
   await env.DB.batch(statements);
@@ -139,10 +156,10 @@ export async function usage(env: Env, who: Identity, payload: Json) {
   const ownedRuns = new Set<string>();
   const now = Date.now();
   const config = await env.DB.prepare(
-    "SELECT reporting_timezone FROM workspaces WHERE id=?",
+    "SELECT reporting_timezone,usage_reset_at FROM workspaces WHERE id=?",
   )
     .bind(who.workspace_id)
-    .first<{ reporting_timezone: string }>();
+    .first<{ reporting_timezone: string; usage_reset_at: number }>();
   if (!config) throw new HttpError(404, "workspace not found");
   const days: [number, number][] = [];
   const ignored: string[] = [];
@@ -160,7 +177,7 @@ export async function usage(env: Env, who: Identity, payload: Json) {
       model = optional(r.model);
     if (kind !== "delta" && kind !== "cumulative")
       throw new HttpError(400, "invalid measurement_kind");
-    if (time < now - 7 * 86400000) {
+    if (time < now - 7 * 86400000 || time < config.usage_reset_at) {
       // A resumed transcript can replay old IDs after detailed deduplication
       // records have expired. Acknowledge them without adding them a second time.
       accepted.push(record);
@@ -188,6 +205,32 @@ export async function usage(env: Env, who: Identity, payload: Json) {
       w1 = integer(counts.cache_write_1h ?? 0);
     if (kind === "cumulative" && cached > input)
       throw new HttpError(400, "cached input exceeds input");
+    integer(input + cached + w5 + w1);
+    const rawPricing = object(r.pricing || {});
+    const pricing: PricingContext = {};
+    for (const key of [
+      "service_tier",
+      "speed",
+      "inference_geo",
+      "billing_provider",
+    ] as const) {
+      if (rawPricing[key] != null && rawPricing[key] !== "")
+        pricing[key] = str(rawPricing[key], 64);
+    }
+    const rates = resolveRates(
+      provider,
+      model,
+      kind,
+      {
+        input,
+        output,
+        cache_read: cached,
+        cache_write_5m: w5,
+        cache_write_1h: w1,
+      },
+      pricing,
+      time,
+    );
     const id = await hash(JSON.stringify([provider, record]));
     const digest = await hash(
       JSON.stringify([
@@ -209,8 +252,8 @@ export async function usage(env: Env, who: Identity, payload: Json) {
     statements.push(
       env.DB.prepare(
         `INSERT OR IGNORE INTO usage_records(workspace_id,id,installation_id,agent,provider,native_record_id,stream_id,
-      counter_epoch,model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      counter_epoch,model,occurred_at,received_at,measurement_kind,input,output,cache_read,cache_write_5m,cache_write_1h,payload_hash,day_start,day_end,pricing_json,resolved_rates,pricing_version)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).bind(
         who.workspace_id,
         id,
@@ -232,8 +275,29 @@ export async function usage(env: Env, who: Identity, payload: Json) {
         digest,
         day[0],
         day[1],
+        JSON.stringify(pricing),
+        JSON.stringify(rates),
+        catalog.version,
       ),
     );
+    if (Object.keys(pricing).length) {
+      // A reporter upgrade can enrich retained evidence without changing its ID
+      // or counters. Queue merged metadata for the same bounded repricer.
+      statements.push(
+        env.DB.prepare(
+          `UPDATE usage_records
+        SET pricing_json=json_patch(pricing_json,?),pricing_version='',
+          resolved_rates=json_set(COALESCE(resolved_rates,'{}'),'$._estimated',1)
+        WHERE workspace_id=? AND id=? AND archived=0
+        AND EXISTS(SELECT 1 FROM json_each(?) j WHERE json_extract(pricing_json,'$.'||j.key) IS NULL)`,
+        ).bind(
+          JSON.stringify(pricing),
+          who.workspace_id,
+          id,
+          JSON.stringify(pricing),
+        ),
+      );
+    }
     statements.push(
       env.DB.prepare(
         "INSERT OR IGNORE INTO usage_observations(workspace_id,usage_id,run_id) VALUES(?,?,?)",

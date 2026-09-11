@@ -108,6 +108,27 @@ class DaemonTest(unittest.TestCase):
         self.assertNotEqual(self.events()[-1]['run_id'],events[0]['run_id'])
         self.assertEqual(self.events()[-1]['execution_id'],events[0]['execution_id'])
         self.assertEqual((self.dir/'config/write.token').stat().st_mode & 0o777,0o600)
+    def test_empty_reporter_stays_silent_across_reconciliation_and_restart(self):
+        self.start()
+        self.wait(lambda:(self.dir/'state/presence-last.json').exists())
+        self.assertEqual([b for p,b in self.requests if p=='/v1/presence'][-1]['runs'],[])
+        count=len(self.requests)
+        for _ in range(4):
+            self.command('reconcile'); time.sleep(.08)
+        self.assertEqual(len(self.requests),count)
+        self.stop(); self.start()
+        self.command('reconcile'); time.sleep(.2)
+        self.assertEqual(len(self.requests),count)
+        self.hook('UserPromptSubmit')
+        self.drain()
+        self.wait(lambda:any(b['runs'] for p,b in self.requests if p=='/v1/presence'))
+        self.hook('SessionEnd')
+        self.drain()
+        self.wait(lambda:[b for p,b in self.requests if p=='/v1/presence'][-1]['runs']==[])
+        count=len(self.requests)
+        self.command('reconcile'); time.sleep(.2)
+        self.assertEqual(len(self.requests),count)
+
     def test_slow_network_does_not_block_hooks(self):
         self.delay = 1.5
         self.start()
