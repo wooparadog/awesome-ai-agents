@@ -5,6 +5,7 @@ import {
   consumeTicket,
   logout,
 } from "./browser-auth";
+import { tokenRoutes } from "./tokens";
 import { servePanel } from "./panel";
 import { authenticate } from "./auth";
 import { ingest, presence, usage } from "./ingest";
@@ -21,6 +22,12 @@ export default {
     try {
       const url = new URL(request.url),
         path = url.pathname;
+      if (
+        path === "/v1/token-access" ||
+        path === "/v1/tokens" ||
+        path.startsWith("/v1/tokens/")
+      )
+        return await tokenRoutes(request, env, ctx);
       if (!path.startsWith("/v1/")) return await servePanel(request, env);
       if (request.method === "POST") {
         if (path === "/v1/browser-links") return await createLink(request, env);

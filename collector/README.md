@@ -6,8 +6,9 @@ and fetches snapshots only when needed. The HTTP API is independent of any parti
 
 ## Hosted collector
 
-The collector is deployed at [ai-agents-collector.stdimg.workers.dev](https://ai-agents-collector.stdimg.workers.dev).
-All application routes require a token; an unauthenticated request returns 401.
+The collector is deployed at [ai.wooparadog.info](https://ai.wooparadog.info).
+The public homepage explains browser login. Private API routes require a token;
+an unauthenticated API request returns 401.
 The configured D1 database is `ai-agents` in APAC, and the scheduled maintenance
 trigger runs hourly. See [deployment details](../docs/deployment.md).
 
@@ -172,6 +173,41 @@ The [web guide](../clients/web/README.md) documents login, expiry/revocation,
 local development origin configuration, and browser tests. The unauthenticated
 homepage is available even when D1 is unavailable; private snapshots continue
 to return their existing explicit quota/migration errors.
+
+
+## Token management
+
+Apply `0011_token_management.sql` before deploying the token-management API and
+frontend. It adds token labels, timestamps, and an explicit management capability
+(default off), plus indexes for workspace token lists and revoked-token cleanup.
+The public web assets now include `tokens.js`. Update reporter binaries to expose
+`ai-agents web --manage-tokens`.
+
+Management access is explicitly delegated through CLI-created browser login links.
+Existing read tokens cannot list or mutate workspace credentials. Created API
+tokens have read/write roles, independent lifetimes, and secrets disclosed only
+at creation. Read tokens cannot manage credentials; write tokens can authorize
+browser logins. See the [protocol](../docs/client-protocol.md#token-management)
+and [web guide](../clients/web/README.md#manage-tokens) for edit, revocation, expiry,
+and storage behavior.
+
+
+Write-token labels default to the target hostname. The provisioner defaults
+`--hostname` to the machine running the command; when provisioning another host,
+pass its actual hostname explicitly:
+
+```sh
+pnpm provision --workspace personal --installation another-machine \
+  --hostname AnotherHost --scope write --output /private/new-credential-directory
+```
+
+`--label` still overrides the name. Apply `0012_installation_hostname.sql` before
+using this provisioner/Worker version. Reporter presence supplies the hostname
+used for default names in the web token editor; existing installation display
+labels are preserved. Credential rotation should provision a replacement,
+atomically install its `credential.token` as the reporter's `write.token`, restart
+and verify the daemon, then revoke the previous token. Browser logins derived
+from revoked write tokens require fresh login links.
 
 ## Idle workload
 

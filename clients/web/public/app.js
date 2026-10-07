@@ -1,3 +1,4 @@
+import { createTokenPanel } from "./tokens.js";
 const $ = (id) => document.getElementById(id);
 const KEY = "ai-agents.read-token.v1";
 const integer = new Intl.NumberFormat("en-US");
@@ -303,7 +304,7 @@ function updateView() {
     ? `△ Usage coverage incomplete${reasons.length ? " · Check " + reasons.join(", ") : ""}. Totals reflect available reports.`
     : "✓ Usage coverage complete · All reporters accounted for";
   $("footer-status").textContent =
-    `REV ${snapshot.revision} · UPDATED ${age(snapshot.server_time).toUpperCase()} · READ ONLY`;
+    `REV ${snapshot.revision} · UPDATED ${age(snapshot.server_time).toUpperCase()} · ${auth?.can_manage_tokens ? "TOKEN MANAGEMENT" : "READ ONLY"}`;
 }
 class ApiError extends Error {
   constructor(status, message, retry = 0) {
@@ -312,12 +313,17 @@ class ApiError extends Error {
     this.retry = retry;
   }
 }
-async function api(path, payload, credential = auth?.token) {
+async function api(
+  path,
+  payload,
+  credential = auth?.token,
+  method = payload ? "POST" : "GET",
+) {
   const headers = {};
   if (credential) headers.Authorization = `Bearer ${credential}`;
   if (payload) headers["Content-Type"] = "application/json";
   const response = await fetch(path, {
-    method: payload ? "POST" : "GET",
+    method,
     headers,
     body: payload
       ? JSON.stringify({ schema_version: 1, ...payload })
@@ -361,6 +367,9 @@ function forget(message) {
   }
   snapshot = null;
   signals = [];
+  tokenPanel.reset();
+  $("view-nav").hidden = true;
+  $("token-panel").hidden = true;
   $("dashboard").hidden = true;
   $("welcome").hidden = false;
   $("logout").hidden = true;
@@ -550,10 +559,16 @@ async function connect() {
 }
 function start() {
   $("welcome").hidden = true;
+  $("view-nav").hidden = false;
   $("dashboard").hidden = false;
   $("logout").hidden = false;
   $("workspace").textContent = `WORKSPACE / ${auth.workspace_id.toUpperCase()}`;
-  log("AUTH", "Read-only browser access established");
+  log(
+    "AUTH",
+    auth.can_manage_tokens
+      ? "Token management access established"
+      : "Read-only browser access established",
+  );
   freshnessTimer = setInterval(updateView, 15000);
   connect();
 }
@@ -673,4 +688,25 @@ async function boot() {
       "This login link is incomplete. Generate a new one with ai-agents web.",
     );
 }
+const tokenPanel = createTokenPanel({
+  api: (path, payload, method) => api(path, payload, auth?.token, method),
+  onUnauthorized: (error) => {
+    if (error.status === 401) authFailure(error);
+  },
+});
+function showView(tokens) {
+  $("dashboard").hidden = tokens;
+  $("token-panel").hidden = !tokens;
+  for (const [id, active] of [
+    ["show-overview", !tokens],
+    ["show-tokens", tokens],
+  ]) {
+    $(id).classList.toggle("selected", active);
+    $(id).setAttribute("aria-pressed", String(active));
+  }
+  if (tokens) tokenPanel.load();
+}
+$("show-overview").onclick = () => showView(false);
+$("show-tokens").onclick = () => showView(true);
+addEventListener("pagehide", () => tokenPanel.reset());
 boot();

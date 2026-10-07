@@ -31,6 +31,12 @@ export async function retain(env: Env, now = Date.now()): Promise<void> {
     ORDER BY u.occurred_at LIMIT 500`;
   await env.DB.batch([
     env.DB.prepare(
+      "DELETE FROM rate_limits WHERE token_id IN (SELECT id FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at<? ORDER BY revoked_at LIMIT 500)",
+    ).bind(summaryCutoff),
+    env.DB.prepare(
+      "DELETE FROM api_tokens WHERE id IN (SELECT id FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at<? ORDER BY revoked_at LIMIT 500)",
+    ).bind(summaryCutoff),
+    env.DB.prepare(
       "DELETE FROM browser_links WHERE id IN (SELECT id FROM browser_links WHERE expires_at<=? LIMIT 500)",
     ).bind(now),
     env.DB.prepare(

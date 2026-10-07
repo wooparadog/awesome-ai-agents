@@ -46,7 +46,7 @@ test("homepage explains CLI access without querying private stats", async ({
   await expect(page.locator("h1").first()).toContainText(
     "Your agents are working.",
   );
-  await expect(page.locator("code")).toContainText(
+  await expect(page.locator("#welcome code")).toContainText(
     "ai-agents web --expires 10m",
   );
   await expect(page.locator("#dashboard")).toBeHidden();
@@ -195,13 +195,11 @@ test("renders diverse states safely, filters sessions, and fits phone screens", 
   await post(request, "/v1/events", { events: rows });
   await post(request, "/v1/presence", {
     observed_at: Date.now(),
-    runs: rows
-      .slice(0, 3)
-      .map((e) => ({
-        run_id: e.run_id,
-        execution_id: e.execution_id,
-        sequence: 2,
-      })),
+    runs: rows.slice(0, 3).map((e) => ({
+      run_id: e.run_id,
+      execution_id: e.execution_id,
+      sequence: 2,
+    })),
     usage: true,
     dropped: 0,
   });
@@ -246,4 +244,184 @@ test("retains the snapshot during an outage and reconnects after network recover
   await expect(page.locator("#connection-text")).toHaveText("LIVE CONNECTION", {
     timeout: 15000,
   });
+});
+
+test("read-only browser sees management instructions without token metadata", async ({
+  page,
+  request,
+}) => {
+  await login(page, request);
+  await page.locator("#show-tokens").click();
+  await expect(page.locator("#token-locked")).toBeVisible();
+  await expect(page.locator("#token-locked")).toContainText(
+    "ai-agents web --manage-tokens",
+  );
+  await expect(page.locator("#token-controls")).toBeHidden();
+  await expect(page.locator(".token-row")).toHaveCount(0);
+});
+
+test("management browser creates, edits and revokes tokens with a one-time secret", async ({
+  page,
+  request,
+}) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const grant = await post(request, "/v1/browser-links", {
+    manage_tokens: true,
+  });
+  await page.goto(grant.url);
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await page.locator("#show-tokens").click();
+  await expect(page.locator("#token-controls")).toBeVisible();
+  const current = page
+    .locator(".token-row")
+    .filter({ hasText: "This browser" });
+  await expect(
+    current.getByRole("button", { name: "Delete", exact: true }),
+  ).toBeDisabled();
+  await page.locator("#token-create").click();
+  await page.locator("#token-label").fill("Desktop viewer");
+  await page.locator("#token-save").click();
+  await expect(page.locator("#token-secret-dialog")).toBeVisible();
+  const secret = await page.locator("#token-secret").inputValue();
+  expect(secret).toMatch(/^[\w-]+\.[\w-]+$/);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(
+    secret,
+  );
+  const before = await request.get("/v1/snapshot", {
+    headers: { Authorization: "Bearer " + secret },
+  });
+  expect(before.status()).toBe(200);
+  await page.locator("#token-secret-done").click();
+  await expect(page.locator("#token-secret")).toHaveValue("");
+  let row = page.locator(".token-row").filter({ hasText: "Desktop viewer" });
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.locator("#token-scope")).toBeDisabled();
+  await page.locator("#token-label").fill("Workstation dashboard");
+  await page.locator("#token-no-expiry").check();
+  await page.locator("#token-save").click();
+  row = page.locator(".token-row").filter({ hasText: "Workstation dashboard" });
+  await expect(row).toContainText("Expires: Never");
+  await page.screenshot({
+    path: "test-results/tokens-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.screenshot({
+    path: "test-results/tokens-mobile.png",
+    fullPage: true,
+  });
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.locator("#token-delete-dialog")).toBeVisible();
+  await page.locator("#token-delete-cancel").click();
+  expect(
+    (
+      await request.get("/v1/snapshot", {
+        headers: { Authorization: "Bearer " + secret },
+      })
+    ).status(),
+  ).toBe(200);
+  await row.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.locator("#token-delete-confirm").click();
+  await expect(row).toContainText("Revoked");
+  await expect(row).toBeHidden();
+  await expect(page.locator("#token-list")).not.toContainText(
+    "Workstation dashboard",
+  );
+  const revoked = page.locator("#token-revoked");
+  await expect(revoked).not.toHaveAttribute("open", "");
+  const summary = revoked.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(row).toBeVisible();
+  await expect(revoked.locator(".token-row")).toHaveCount(
+    Number(await page.locator("#token-revoked-count").textContent()),
+  );
+  await page.locator("#token-reload").click();
+  await expect(page.locator("#token-reload")).toBeEnabled();
+  await expect(row).toBeVisible();
+  await summary.click();
+  await expect(row).toBeHidden();
+  expect(
+    (
+      await request.get("/v1/snapshot", {
+        headers: { Authorization: "Bearer " + secret },
+      })
+    ).status(),
+  ).toBe(401);
+  await page.locator("#show-overview").click();
+  await expect(page.locator("#dashboard")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("write-token creation selects an installation and secret text is cleared on Escape", async ({
+  page,
+  request,
+}) => {
+  const grant = await post(request, "/v1/browser-links", {
+    manage_tokens: true,
+  });
+  await page.goto(grant.url);
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await page.locator("#show-tokens").click();
+  await expect(page.locator("#token-controls")).toBeVisible();
+  await page.locator("#token-create").click();
+  await page.locator("#token-label").fill("Temporary reporter");
+  await page.locator("#token-scope").selectOption("write");
+  await expect(page.locator("#token-installation-field")).toBeVisible();
+  await page.locator("#token-installation").selectOption("web-test-writer");
+  await page.locator("#token-save").click();
+  await expect(page.locator("#token-secret-dialog")).toBeVisible();
+  const secret = await page.locator("#token-secret").inputValue();
+  expect(
+    (
+      await request.get("/v1/snapshot", {
+        headers: { Authorization: "Bearer " + secret },
+      })
+    ).status(),
+  ).toBe(403);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#token-secret")).toHaveValue("");
+  await expect(
+    page.locator(".token-row").filter({ hasText: "Temporary reporter" }),
+  ).toContainText("Write / arch-workstation");
+});
+
+test("write labels follow the selected hostname without overwriting custom names", async ({
+  page,
+  request,
+}) => {
+  await post(request, "/v1/presence", {
+    observed_at: Date.now(),
+    runs: [],
+    hostname: "ArchTestHost",
+    usage: true,
+    dropped: 0,
+  });
+  const grant = await post(request, "/v1/browser-links", {
+    manage_tokens: true,
+  });
+  await page.goto(grant.url);
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await page.locator("#show-tokens").click();
+  await expect(page.locator("#token-controls")).toBeVisible();
+  await page.locator("#token-create").click();
+  await page.locator("#token-scope").selectOption("write");
+  await expect(page.locator("#token-label")).toHaveValue("ArchTestHost");
+  await page.locator("#token-label").fill("Custom reporter");
+  await page.locator("#token-scope").selectOption("read");
+  await page.locator("#token-scope").selectOption("write");
+  await expect(page.locator("#token-label")).toHaveValue("Custom reporter");
+  await page.locator("#token-label").fill("");
+  await page.locator("#token-save").click();
+  await expect(page.locator("#token-secret-dialog")).toBeVisible();
+  await page.locator("#token-secret-done").click();
+  await expect(
+    page.locator(".token-row").filter({ hasText: "ArchTestHost" }),
+  ).toHaveCount(1);
 });

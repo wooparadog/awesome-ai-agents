@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Generates credentials and an operator SQL file. Applies only to local D1 when requested.
+import { hostname } from "node:os";
 import { parseArgs } from "node:util";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -11,6 +12,7 @@ const { values } = parseArgs({
     workspace: { type: "string", default: "personal" },
     installation: { type: "string" },
     label: { type: "string" },
+    hostname: { type: "string" },
     scope: { type: "string", default: "write" },
     output: { type: "string" },
     local: { type: "boolean", default: false },
@@ -33,11 +35,24 @@ else {
   const id = randomUUID(),
     installation = values.installation || randomUUID(),
     secret = randomBytes(32).toString("base64url");
+  const host = values.hostname || hostname();
+  const label = values.label || (values.scope === "write" ? host : "Viewer");
+  if (
+    !host.length ||
+    host.length > 253 ||
+    /[\x00-\x1f]/.test(host) ||
+    !label.length ||
+    label.length > 100 ||
+    /[\x00-\x1f]/.test(label)
+  )
+    throw new Error(
+      "invalid hostname or label (label must be at most 100 characters)",
+    );
   const digest = createHash("sha256").update(secret).digest("hex");
   sql = `INSERT INTO workspaces(id,name,created_at) VALUES(${q(values.workspace)},${q(values.workspace)},${Date.now()}) ON CONFLICT DO NOTHING;\n`;
   if (values.scope === "write")
-    sql += `INSERT INTO installations(workspace_id,id,label,created_at) VALUES(${q(values.workspace)},${q(installation)},${q(values.label || installation)},${Date.now()}) ON CONFLICT DO NOTHING;\n`;
-  sql += `INSERT INTO api_tokens(id,workspace_id,secret_hash,scope,installation_id) VALUES(${q(id)},${q(values.workspace)},${q(digest)},${q(values.scope)},${values.scope === "write" ? q(installation) : "NULL"});\n`;
+    sql += `INSERT INTO installations(workspace_id,id,label,hostname,created_at) VALUES(${q(values.workspace)},${q(installation)},${q(values.label || host)},${q(host)},${Date.now()}) ON CONFLICT DO NOTHING;\n`;
+  sql += `INSERT INTO api_tokens(id,workspace_id,secret_hash,scope,installation_id,label,created_at,updated_at) VALUES(${q(id)},${q(values.workspace)},${q(digest)},${q(values.scope)},${values.scope === "write" ? q(installation) : "NULL"},${q(label)},${Date.now()},${Date.now()});\n`;
   writeFileSync(resolve(out, "credential.token"), `${id}.${secret}\n`, {
     mode: 0o600,
     flag: "wx",
@@ -50,6 +65,8 @@ else {
         installation_id: values.scope === "write" ? installation : null,
         token_id: id,
         scope: values.scope,
+        label,
+        hostname: values.scope === "write" ? host : null,
       },
       null,
       2,

@@ -40,9 +40,9 @@ requires authorization.
 | `GET /v1/browser-subscribe` | Same-origin WebSocket with ticket subprotocol | Existing v1 subscription protocol |
 | `POST /v1/browser-logout` | **Read** token being revoked | Revokes that token and closes its subscriptions |
 
-All POST bodies include `schema_version: 1`. Link creation accepts `expires_in`
+All POST bodies include `schema_version: 1`. Link creation accepts `manage_tokens` (boolean, default false) and `expires_in`
 (seconds, default 600, minimum 60, maximum 3600) and returns `url`, `expires_at`,
-and `browser_expires_at` (UTC milliseconds). The URL is `/login#token=ID.SECRET`;
+and `browser_expires_at` (UTC milliseconds), plus `can_manage_tokens`. The URL is `/login#token=ID.SECRET`;
 its fragment never reaches HTTP logs. The browser removes the fragment before
 posting `{schema_version:1, token:"ID.SECRET"}` to exchange it. An invalid secret
 returns 401; an expired/consumed link returns 410. Redemption is atomic, so only
@@ -75,6 +75,50 @@ with native clients.
 Each writer is limited to eight outstanding links and 32 active browser tokens;
 each reader is limited to eight unused connection tickets. Secrets are hashed in
 D1 and expired rows are cleaned in bounded, indexed hourly maintenance batches.
+
+## Token management
+
+Management requires a read credential with `can_manage_tokens=true`, issued by
+redeeming a link explicitly created with `manage_tokens:true`. Existing tokens and
+default browser links have this flag disabled. Parent expiry/revocation and
+installation status remain enforced on every request. The data-plane scope stays
+`read`: management browsers cannot submit lifecycle or usage data.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /v1/token-access` | Any reader can inspect its own management capability and token ID |
+| `GET /v1/tokens?cursor=ID` | Metadata for up to 100 workspace tokens, next cursor, and installation choices |
+| `POST /v1/tokens` | Creates a read/write API token; returns 201 with `token` (secret shown once) and `metadata` |
+| `PATCH /v1/tokens/:id` | Updates label and expiry with optimistic concurrency |
+| `DELETE /v1/tokens/:id` | Revokes the token; returns `{ok:true}`; preserves usage/history |
+
+All mutation bodies use JSON with `schema_version:1`, including DELETE. Foreign
+origins are rejected. All token queries include the authenticated workspace.
+Lists and edits never return `secret_hash` or an existing token's secret.
+
+Creation accepts `label` (1–100 characters), `scope` (`read` or `write`),
+`installation_id` (required for writes; null/omitted for reads), and `expires_at`
+(null or future UTC milliseconds within one year). Write installations must belong
+to the workspace and be enabled. For writes, omitted/null/blank labels default
+to the reported hostname, with installation label/ID as fallback (bounded to 100
+characters); explicit labels are preserved. Read-token labels are required.
+Unknown fields, including attempts to grant
+management permission directly, return 400. API tokens are independent of the
+issuing browser and survive its logout. A write token can authorize later browser
+logins. At most 256 active tokens may be present when creating through this API.
+
+Editing accepts `label`, `expires_at`, and `expected_updated_at` from the list
+response (null for legacy credentials). Role, installation, and secret cannot be
+edited. Concurrent edits and edits of revoked tokens return 409. Browser expiry
+cannot exceed its original 30-day or parent-token limit. The current management
+credential and its parent cannot be edited/revoked through the management API;
+Sign out still revokes the current browser. Token deletion is idempotent while
+its revoked row exists; revoked metadata is cleaned after 30 days.
+
+Revocation takes effect on subsequent authorization immediately. Active sockets
+for the changed token and its derived browsers are closed in background work to
+force reauthorization. If that close fails, authorization is rechecked before
+new invalidations after the five-minute cache expires; snapshots always reauthorize.
 
 ## Reading state
 
@@ -235,6 +279,11 @@ Lifecycle data is allowlisted: `cwd`, `model`, `pid`, `source`,
 command arguments, or tool payloads. Unknown event names are neutral metadata
 observations. Reporting failures must not affect the coding agent's decisions.
 The current source-event mappings are implemented in `collector/src/protocol.ts`.
+
+Presence bodies may include `hostname` (a string of up to 253 characters),
+recorded on the authenticated installation for default write-token names. Omitting
+it preserves the last reported hostname. Existing installation display labels
+are independent.
 
 Presence bodies include `schema_version`, `observed_at`, `runs`, `usage` (reporting
 capability), and `dropped` (diagnostic count). Each run observation has `run_id`,

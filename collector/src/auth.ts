@@ -5,6 +5,8 @@ export interface Identity {
   installation_id: string | null;
   scope: string;
   expires_at: number | null;
+  can_manage_tokens?: boolean;
+  parent_token_id?: string | null;
 }
 export async function authenticate(
   request: Request,
@@ -83,6 +85,8 @@ async function authorize(
     workspace_id: row.workspace_id,
     installation_id: row.installation_id,
     scope: row.scope,
+    can_manage_tokens: !!row.can_manage_tokens,
+    parent_token_id: row.parent_token_id,
     expires_at:
       row.parent_expiry == null
         ? row.expires_at
