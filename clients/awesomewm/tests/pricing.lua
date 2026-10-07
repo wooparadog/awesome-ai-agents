@@ -1,0 +1,10 @@
+package.path = "./?.lua;./?/init.lua;" .. package.path
+local pricing = require("clients.awesomewm.pricing")
+local value, known = pricing.cost("gpt-6-astra", { input = 100, cache_write_5m = 100 })
+assert(known and math.abs(value - 0.00225) < 1e-12)
+assert(pricing.lookup("gpt-5.6-sol").input == 4)
+assert(pricing.lookup("gpt-5.2-2025-12-11").input == 1.75)
+assert(pricing.lookup("gpt-5.6-sol-future") == nil)
+local _, supported = pricing.cost("gpt-5-pro", { cache_read = 1 })
+assert(not supported)
+print("Legacy standard pricing and unknown rates verified")

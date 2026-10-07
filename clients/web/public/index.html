@@ -28,6 +28,14 @@
         </div>
       </header>
       <main>
+        <nav class="view-nav" id="view-nav" aria-label="Workspace pages" hidden>
+          <button class="tab selected" id="show-overview" aria-pressed="true">
+            01 / Overview
+          </button>
+          <button class="tab" id="show-tokens" aria-pressed="false">
+            02 / Tokens
+          </button>
+        </nav>
         <section id="welcome" class="welcome">
           <div class="eyebrow">
             <span class="tiny-line"></span> OBSERVABILITY FOR YOUR AGENT FLEET
@@ -213,6 +221,169 @@
           </section>
           <div class="coverage" id="coverage"></div>
         </section>
+        <section id="token-panel" hidden aria-label="Token management">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">WORKSPACE / ACCESS CONTROL</div>
+              <h1>Keys to the grid<span class="cursor">_</span></h1>
+              <p class="muted">
+                Issue credentials. Set their lifetime. Retire access.
+              </p>
+            </div>
+            <button class="button" id="token-reload">↻ Reload tokens</button>
+          </div>
+          <div id="token-message" class="notice" role="status" hidden></div>
+          <div id="token-locked" class="panel access-gate" hidden>
+            <h2>Authorize token management</h2>
+            <p>
+              This browser has read-only access. Run this on a reporting machine
+              and open its new login link here:
+            </p>
+            <code>ai-agents web --manage-tokens</code>
+            <p>
+              Management access can create, edit, and revoke credentials for
+              this workspace.
+            </p>
+          </div>
+          <div id="token-controls" hidden>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>
+                  <span class="section-index">KEYRING /</span> Workspace tokens
+                </h2>
+                <button class="button primary" id="token-create">
+                  + Create token
+                </button>
+              </div>
+              <div class="panel-foot">
+                Secrets are shown only when created. Deleting a token revokes it
+                immediately; its metadata stays visible for up to 30 days.
+              </div>
+              <div id="token-list" class="token-list"></div>
+              <details id="token-revoked" class="token-revoked" hidden>
+                <summary>
+                  Revoked tokens
+                  <span id="token-revoked-count" class="count">0</span>
+                </summary>
+                <div id="token-revoked-list" class="token-list"></div>
+              </details>
+              <div class="panel-foot">
+                <button class="button" id="token-more" hidden>
+                  Load more tokens
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+        <dialog id="token-editor" aria-labelledby="token-editor-title">
+          <form id="token-form">
+            <div class="panel-heading">
+              <h2 id="token-editor-title">Create token</h2>
+              <button
+                type="button"
+                class="button subtle"
+                id="token-editor-close"
+                aria-label="Close token editor"
+              >
+                ✕
+              </button>
+            </div>
+            <div class="dialog-body">
+              <p id="token-editor-note" class="muted"></p>
+              <label class="form-field"
+                >Label<input
+                  id="token-label"
+                  required
+                  maxlength="100"
+                  placeholder="e.g. laptop reporter"
+                  autocomplete="off"
+              /></label>
+              <label class="form-field"
+                >Role<select id="token-scope">
+                  <option value="read">Read — view workspace statistics</option>
+                  <option value="write">
+                    Write — report from one installation
+                  </option>
+                </select></label
+              >
+              <label class="form-field" id="token-installation-field" hidden
+                >Installation<select id="token-installation"></select
+              ></label>
+              <label class="form-check"
+                ><input id="token-no-expiry" type="checkbox" /> No
+                expiration</label
+              >
+              <label class="form-field"
+                >Expires at (your local time)<input
+                  id="token-expiry"
+                  type="datetime-local"
+                  step="1"
+                  required
+              /></label>
+              <p
+                id="token-form-error"
+                class="form-error"
+                role="alert"
+                hidden
+              ></p>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="button subtle" id="token-cancel">
+                Cancel</button
+              ><button type="submit" class="button primary" id="token-save">
+                Create token
+              </button>
+            </div>
+          </form>
+        </dialog>
+        <dialog id="token-secret-dialog" aria-labelledby="token-secret-title">
+          <div class="panel-heading">
+            <h2 id="token-secret-title">Token created</h2>
+          </div>
+          <div class="dialog-body">
+            <p>Save this secret now. It cannot be retrieved again.</p>
+            <label class="form-field"
+              >Token secret<textarea
+                id="token-secret"
+                readonly
+                rows="3"
+                spellcheck="false"
+                aria-label="New token secret"
+              ></textarea>
+            </label>
+            <p class="muted" id="token-secret-note"></p>
+            <p class="form-error" id="token-copy-message" role="status"></p>
+          </div>
+          <div class="dialog-actions">
+            <button class="button" id="token-copy">Copy token</button
+            ><button class="button primary" id="token-secret-done">Done</button>
+          </div>
+        </dialog>
+        <dialog id="token-delete-dialog" aria-labelledby="token-delete-title">
+          <div class="panel-heading">
+            <h2 id="token-delete-title">Delete token?</h2>
+          </div>
+          <div class="dialog-body">
+            <p id="token-delete-description"></p>
+            <p class="muted">
+              Clients using this credential will lose access. Browser logins
+              authorized by it will also stop working. This cannot be undone.
+            </p>
+            <p
+              class="form-error"
+              id="token-delete-error"
+              role="alert"
+              hidden
+            ></p>
+          </div>
+          <div class="dialog-actions">
+            <button class="button subtle" id="token-delete-cancel">
+              Cancel</button
+            ><button class="button danger" id="token-delete-confirm">
+              Delete token
+            </button>
+          </div>
+        </dialog>
       </main>
       <footer>
         <span

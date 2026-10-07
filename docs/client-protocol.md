@@ -40,9 +40,9 @@ requires authorization.
 | `GET /v1/browser-subscribe` | Same-origin WebSocket with ticket subprotocol | Existing v1 subscription protocol |
 | `POST /v1/browser-logout` | **Read** token being revoked | Revokes that token and closes its subscriptions |
 
-All POST bodies include `schema_version: 1`. Link creation accepts `expires_in`
+All POST bodies include `schema_version: 1`. Link creation accepts `manage_tokens` (boolean, default false) and `expires_in`
 (seconds, default 600, minimum 60, maximum 3600) and returns `url`, `expires_at`,
-and `browser_expires_at` (UTC milliseconds). The URL is `/login#token=ID.SECRET`;
+and `browser_expires_at` (UTC milliseconds), plus `can_manage_tokens`. The URL is `/login#token=ID.SECRET`;
 its fragment never reaches HTTP logs. The browser removes the fragment before
 posting `{schema_version:1, token:"ID.SECRET"}` to exchange it. An invalid secret
 returns 401; an expired/consumed link returns 410. Redemption is atomic, so only
@@ -75,6 +75,50 @@ with native clients.
 Each writer is limited to eight outstanding links and 32 active browser tokens;
 each reader is limited to eight unused connection tickets. Secrets are hashed in
 D1 and expired rows are cleaned in bounded, indexed hourly maintenance batches.
+
+## Token management
+
+Management requires a read credential with `can_manage_tokens=true`, issued by
+redeeming a link explicitly created with `manage_tokens:true`. Existing tokens and
+default browser links have this flag disabled. Parent expiry/revocation and
+installation status remain enforced on every request. The data-plane scope stays
+`read`: management browsers cannot submit lifecycle or usage data.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /v1/token-access` | Any reader can inspect its own management capability and token ID |
+| `GET /v1/tokens?cursor=ID` | Metadata for up to 100 workspace tokens, next cursor, and installation choices |
+| `POST /v1/tokens` | Creates a read/write API token; returns 201 with `token` (secret shown once) and `metadata` |
+| `PATCH /v1/tokens/:id` | Updates label and expiry with optimistic concurrency |
+| `DELETE /v1/tokens/:id` | Revokes the token; returns `{ok:true}`; preserves usage/history |
+
+All mutation bodies use JSON with `schema_version:1`, including DELETE. Foreign
+origins are rejected. All token queries include the authenticated workspace.
+Lists and edits never return `secret_hash` or an existing token's secret.
+
+Creation accepts `label` (1–100 characters), `scope` (`read` or `write`),
+`installation_id` (required for writes; null/omitted for reads), and `expires_at`
+(null or future UTC milliseconds within one year). Write installations must belong
+to the workspace and be enabled. For writes, omitted/null/blank labels default
+to the reported hostname, with installation label/ID as fallback (bounded to 100
+characters); explicit labels are preserved. Read-token labels are required.
+Unknown fields, including attempts to grant
+management permission directly, return 400. API tokens are independent of the
+issuing browser and survive its logout. A write token can authorize later browser
+logins. At most 256 active tokens may be present when creating through this API.
+
+Editing accepts `label`, `expires_at`, and `expected_updated_at` from the list
+response (null for legacy credentials). Role, installation, and secret cannot be
+edited. Concurrent edits and edits of revoked tokens return 409. Browser expiry
+cannot exceed its original 30-day or parent-token limit. The current management
+credential and its parent cannot be edited/revoked through the management API;
+Sign out still revokes the current browser. Token deletion is idempotent while
+its revoked row exists; revoked metadata is cleaned after 30 days.
+
+Revocation takes effect on subsequent authorization immediately. Active sockets
+for the changed token and its derived browsers are closed in background work to
+force reauthorization. If that close fails, authorization is rechecked before
+new invalidations after the five-minute cache expires; snapshots always reauthorize.
 
 ## Reading state
 
@@ -112,7 +156,7 @@ path describes the reporting installation and must never be interpreted as a
 process or path on the viewing machine.
 
 The Rust reporter checks local processes and transcripts every 30 seconds and
-reports idle presence every five minutes. Local checks alone make no HTTP request.
+renews presence every five minutes only while live processes remain. Local checks alone make no HTTP request.
 The collector allows ten minutes of presence freshness before marking a run stale. This lease
 is separate from the two-minute maximum age accepted for a newly submitted presence observation.
 Hooks can submit a fresh observation of their own identified agent process without
@@ -123,7 +167,11 @@ Snapshot runs are current; ended runs are available in history. Freshness is a
 separate value: `live`, `stale`, or `unverified`. Lack of recent activity does not
 mean the process ended. Never turn a network failure into an empty snapshot.
 
-Usage totals contain `tokens`, `dollars`, `priced`, `available`, and `complete`.
+Usage totals contain `tokens`, `dollars`, `priced`, `estimated`, `available`, and `complete`.
+`estimated` marks assumed billing details or historical/current-rate estimates;
+it is independent of whether every token metric has a known rate (`priced`).
+Display estimates with `≈`, partial costs as partial, and wholly unpriced usage
+as unavailable rather than zero. Do not describe estimated totals as lower bounds.
 Unavailable usage is not zero. Unpriced models can still have known token counts;
 dollar totals can be partial estimates. Use the server's totals, which account for
 copied transcripts and cumulative counters; summing run totals can double-count
@@ -177,8 +225,8 @@ once, and no durable per-client replay cursor is promised. HTTP ingestion succes
 means the state and pending notification committed; the signal may arrive later.
 Failed snapshot requests need independent retries even if the socket stays healthy.
 
-Subscriptions have an authorization lease of at most five minutes, shortened by
-token expiry. Code `4001` requests reauthentication; reconnect using the current
+Subscriptions last at most one day, shortened by token expiry, and revalidate
+authorization before new broadcasts when the five-minute authorization cache expires. Code `4001` requests reauthentication; reconnect using the current
 credential. Code `4003` indicates revocation when explicitly closed. Other close
 or connection errors require recovery; repeated authentication failures should be
 surfaced without an aggressive retry loop. An HTTP read always revalidates the token.
@@ -232,6 +280,11 @@ command arguments, or tool payloads. Unknown event names are neutral metadata
 observations. Reporting failures must not affect the coding agent's decisions.
 The current source-event mappings are implemented in `collector/src/protocol.ts`.
 
+Presence bodies may include `hostname` (a string of up to 253 characters),
+recorded on the authenticated installation for default write-token names. Omitting
+it preserves the last reported hostname. Existing installation display labels
+are independent.
+
 Presence bodies include `schema_version`, `observed_at`, `runs`, `usage` (reporting
 capability), and `dropped` (diagnostic count). Each run observation has `run_id`,
 `execution_id`, and an increasing `sequence`. Presence is freshly observed and sent
@@ -252,6 +305,13 @@ record IDs, the originating thread ID as `stream_id`, `responses-v1` as the epoc
 and per-response deltas. These supersede legacy cumulative estimates from the first
 exact response onward, so upgrades replay the transcript from the beginning. Delta input excludes
 both cached reads and cache writes, which have their own counters.
+
+Optional usage `pricing` metadata includes returned `service_tier`, `speed`,
+`inference_geo`, and `billing_provider` strings (up to 64 characters each). Missing
+fields are unknown; do not manufacture standard-tier evidence from request
+preferences. Metadata is independent of token identity and can enrich retained
+records on replay, but contradictory nonempty fields return 409. See
+[token pricing](pricing.md) for supported combinations and repricing behavior.
 
 Successful event/usage responses contain an `accepted` array of event IDs or native
 usage record IDs, respectively. Remove outbox items only after acknowledgement.
@@ -281,3 +341,23 @@ Consumers should tolerate additive response fields and new agent/model names.
 Unknown WebSocket message types can be ignored; unsupported protocol versions must
 be surfaced. Changes to the established identity, usage, authorization, or state
 semantics require compatibility review and, when breaking, a new protocol version.
+
+## Idle operation and telemetry resets
+
+Reporters may stop sending unchanged presence when no verified live processes
+remain. Coverage and process-set changes still send an update, and live processes
+keep the five-minute heartbeat/ten-minute freshness lease. Silence never proves
+liveness: installations naturally become stale after their last contact.
+
+Presence batches publish one revision, including empty-run coverage changes.
+Identical timestamp/sequence retries do not extend leases or publish again.
+Idle WebSockets can stay open for up to one day, bounded by credential expiry.
+Before publishing after five minutes without an authorization check, the server
+revalidates the token, parent, and installation. Revocation APIs still close their
+subscribers promptly. Ping/pong auto-responses do not invoke application code.
+Hidden browser tabs disconnect and fetch a fresh snapshot after resubscribing.
+
+Snapshots include `usage_reset_at` (milliseconds, zero before any reset). Counts
+on the reset day cover only usage since that timestamp. Telemetry reset preserves
+live session identities, configuration and credentials. Older queued usage is
+acknowledged as ignored, so it cannot restore deliberately deleted totals.

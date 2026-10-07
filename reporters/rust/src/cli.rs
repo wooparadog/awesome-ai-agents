@@ -134,6 +134,7 @@ pub fn help() {
     ] {
         println!("  {command:<34} {description}")
     }
+    println!("\n  web --manage-tokens authorizes token management in that browser.");
     println!("\n  NO_COLOR=1 disables terminal colors. --json keeps output scriptable.\n");
 }
 pub fn duration(value: &str) -> Result<u64> {
@@ -156,11 +157,13 @@ pub fn duration(value: &str) -> Result<u64> {
 }
 pub async fn web(paths: &Paths, args: &[String]) -> Result<()> {
     let mut seconds = 600;
+    let mut manage_tokens = false;
     let mut as_json = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => as_json = true,
+            "--manage-tokens" => manage_tokens = true,
             "--expires" => {
                 i += 1;
                 seconds = duration(
@@ -192,7 +195,7 @@ pub async fn web(paths: &Paths, args: &[String]) -> Result<()> {
     let mut response = client
         .post(format!("{url}/v1/browser-links"))
         .bearer_auth(token.trim())
-        .json(&json!({"schema_version":1,"expires_in":seconds}))
+        .json(&json!({"schema_version":1,"expires_in":seconds,"manage_tokens":manage_tokens}))
         .send()
         .await
         .context("cannot reach collector")?;
@@ -268,7 +271,12 @@ pub async fn web(paths: &Paths, args: &[String]) -> Result<()> {
     field(
         "Browser access",
         format!(
-            "read only · up to {} days",
+            "{} · up to {} days",
+            if value["can_manage_tokens"] == true {
+                "read + token management"
+            } else {
+                "read only"
+            },
             browser_expires
                 .saturating_sub(store::now())
                 .div_ceil(86400000)

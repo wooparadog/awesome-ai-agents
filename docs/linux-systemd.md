@@ -178,6 +178,9 @@ journalctl --user -u ai-agents.service -n 50 --no-pager
 ```
 
 Open the URL printed by `ai-agents web` for the [live web panel](../clients/web/README.md).
+For token management, generate a new login with `ai-agents web --manage-tokens`
+and open the Tokens page. This grants credential-management permission to that
+browser; ordinary browser sessions remain read-only.
 `status` is human-readable; `status --json` is intended for scripts. CLI network
 commands and the daemon can share a `proxy_url` setting in the reporter's private
 `config.json`. Without that setting, CLI commands inherit the shell environment;

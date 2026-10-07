@@ -55,6 +55,7 @@ struct Job {
     body: Value,
     files: Vec<PathBuf>,
     presence: bool,
+    presence_summary: Option<Value>,
 }
 struct Reply {
     job: Job,
@@ -74,6 +75,17 @@ struct Engine {
     attempts: u32,
     single_batches: usize,
     missing_transcripts: HashMap<String, Value>,
+    last_presence: Value,
+    presence_cycle: Value,
+}
+fn presence_due(previous: &Value, summary: &Value, now: u64, live: bool) -> bool {
+    previous["summary"] != *summary
+        || (live
+            && now.saturating_sub(previous["observed_at"].as_u64().unwrap_or(0))
+                >= HEARTBEAT.as_millis() as u64)
+        || previous["observed_at"]
+            .as_u64()
+            .is_some_and(|time| time > now)
 }
 impl Engine {
     fn event(
@@ -345,7 +357,7 @@ impl Engine {
         }
         Ok(())
     }
-    fn presence_job(&mut self) -> Result<Job> {
+    fn presence_job(&mut self) -> Result<Option<Job>> {
         let mut runs = Vec::new();
         let mut writes = Vec::new();
         let mut candidates = Vec::new();
@@ -355,6 +367,25 @@ impl Engine {
                 candidates.push((path, run));
             }
         }
+        let now = store::now();
+        let hostname = fs::read_to_string("/proc/sys/kernel/hostname")
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
+        let usage = self.ready && store::files(&self.paths.state.join("outbox"))?.is_empty();
+        let dropped = self.dropped()?;
+        let summary = json!({"installation":self.installation,"hostname":hostname,"usage":usage,"dropped":dropped,
+            "runs":candidates.iter().map(|(_,run)|json!({"run_id":run["run_id"],"execution_id":run["execution_id"]})).collect::<Vec<_>>()});
+        if self.presence_after != 0 && self.presence_cycle != summary {
+            self.presence_after = 0;
+        }
+        if self.presence_after == 0
+            && !presence_due(&self.last_presence, &summary, now, !candidates.is_empty())
+        {
+            self.presence = false;
+            return Ok(None);
+        }
+        self.presence_cycle = summary.clone();
         let end = (self.presence_after + 128).min(candidates.len());
         for (path, mut run) in candidates
             .iter()
@@ -369,12 +400,15 @@ impl Engine {
         self.presence_after = if end < candidates.len() { end } else { 0 };
         self.presence = self.presence_after != 0;
         self.paths.transaction(writes, None)?;
-        Ok(Job {
+        Ok(Some(Job {
             endpoint: "/v1/presence",
-            body: json!({"schema_version":1,"observed_at":store::now(),"runs":runs,"usage":self.ready && store::files(&self.paths.state.join("outbox"))?.is_empty(),"dropped":self.dropped()?}),
+            body: json!({"schema_version":1,"observed_at":now,"hostname":hostname,"runs":runs,"usage":usage,"dropped":dropped}),
             files: vec![],
             presence: true,
-        })
+            // Only the final acknowledged page commits the complete observation.
+            presence_summary: (self.presence_after == 0)
+                .then(|| json!({"observed_at":now,"summary":summary})),
+        }))
     }
     fn next_job(&mut self) -> Result<Option<Job>> {
         if store::now() < self.retry_at {
@@ -399,8 +433,12 @@ impl Engine {
                 self.quarantine(&path)?;
                 continue;
             }
-            if kind.is_empty() && k == "usage" && self.presence {
-                return Ok(Some(self.presence_job()?));
+            if kind.is_empty()
+                && k == "usage"
+                && self.presence
+                && let Some(job) = self.presence_job()?
+            {
+                return Ok(Some(job));
             }
             if !kind.is_empty() && kind != k {
                 continue;
@@ -441,10 +479,16 @@ impl Engine {
                 body: json!({"schema_version":1,key:records}),
                 files,
                 presence: false,
+                presence_summary: None,
             }));
         }
         if self.presence {
-            return Ok(Some(self.presence_job()?));
+            // Do not advertise a transient scan state before local reconciliation
+            // has had a chance to discover closures and late transcript records.
+            if !self.scan.is_empty() {
+                return Ok(None);
+            }
+            return self.presence_job();
         }
         Ok(None)
     }
@@ -469,6 +513,10 @@ impl Engine {
                     .all(|v| v[id].as_str().is_some_and(|s| ids.contains(s)))
             });
         if accepted {
+            if let Some(summary) = &reply.job.presence_summary {
+                store::write(&self.paths.state.join("presence-last.json"), summary)?;
+                self.last_presence = summary.clone();
+            }
             self.single_batches = self.single_batches.saturating_sub(reply.job.files.len());
             for path in &reply.job.files {
                 store::remove(path)?
@@ -650,11 +698,21 @@ pub async fn run(paths: Paths) -> Result<()> {
         attempts,
         single_batches: 0,
         missing_transcripts: HashMap::new(),
+        last_presence: store::read(&paths.state.join("presence-last.json")).unwrap_or(Value::Null),
+        presence_cycle: Value::Null,
     };
     let (tx, mut rx) = mpsc::channel(1);
     let mut inflight = false;
     let mut next_reconcile = Instant::now();
-    let mut next_presence = Instant::now() + HEARTBEAT;
+    let mut next_presence = Instant::now()
+        + Duration::from_millis(
+            engine.last_presence["observed_at"]
+                .as_u64()
+                .unwrap_or(0)
+                .saturating_add(HEARTBEAT.as_millis() as u64)
+                .saturating_sub(store::now())
+                .min(HEARTBEAT.as_millis() as u64),
+        );
     let mut next_scan = Instant::now();
     let mut next_prune = Instant::now();
     let mut buffer = [0; 64];
@@ -714,11 +772,63 @@ pub async fn run(paths: Paths) -> Result<()> {
             _=terminate.recv()=>break,
             _=interrupt.recv()=>break,
             received=socket.recv(&mut buffer)=>{let n=received?; if &buffer[..n]==b"reconcile" {next_reconcile=Instant::now();}},
-            Some(reply)=rx.recv()=>{inflight=false;engine.complete(reply)?;},
+            Some(reply)=rx.recv()=>{
+                inflight=false;
+                let renewed = reply.status == 200 && reply.job.presence_summary.is_some();
+                engine.complete(reply)?;
+                if renewed { next_presence = Instant::now() + HEARTBEAT; }
+            },
             _=sleep_until(deadline)=>{},
         }
     }
     store::remove(&paths.socket())?;
     store::remove(&paths.state.join("daemon-status.json"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn acknowledged_idle_state_stays_silent_for_eight_hours() {
+        let summary = json!({"runs":[],"usage":true,"dropped":0});
+        let saved = json!({"observed_at":1000,"summary":summary});
+        // Serialization models a daemon restart; elapsed time alone is not work.
+        let restored: Value = serde_json::from_str(&saved.to_string()).unwrap();
+        for minute in 0..=480 {
+            assert!(!presence_due(
+                &restored,
+                &summary,
+                1000 + minute * 60000,
+                false
+            ));
+        }
+        assert!(presence_due(
+            &saved,
+            &json!({"runs":[],"usage":false,"dropped":0}),
+            2000,
+            false
+        ));
+        assert!(presence_due(
+            &saved,
+            &json!({"runs":[],"usage":true,"dropped":1}),
+            2000,
+            false
+        ));
+    }
+    #[test]
+    fn live_processes_still_renew_leases_and_clock_rollback_is_not_suppressed() {
+        let summary = json!({"runs":["r"],"usage":true});
+        let saved = json!({"observed_at":1000,"summary":summary});
+        assert!(!presence_due(&saved, &summary, 300999, true));
+        assert!(presence_due(&saved, &summary, 301000, true));
+        assert!(presence_due(&saved, &summary, 0, true));
+        assert!(presence_due(
+            &saved,
+            &json!({"runs":[],"usage":true}),
+            2000,
+            false
+        ));
+        assert!(presence_due(&Value::Null, &summary, 2000, true));
+    }
 }

@@ -2,7 +2,7 @@ import { authenticate, authenticateId, type Identity } from "./auth";
 import { body, hash, HttpError, integer, response } from "./protocol";
 
 const DAY = 86400000;
-function credential() {
+export function credential() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const secret = btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
@@ -32,7 +32,7 @@ export function sameOrigin(request: Request, required = false) {
   )
     throw new HttpError(403, "origin not allowed");
 }
-function jsonRequest(request: Request) {
+export function jsonRequest(request: Request) {
   sameOrigin(request);
   if (
     !(request.headers.get("Content-Type") || "").startsWith("application/json")
@@ -46,13 +46,19 @@ export async function createLink(request: Request, env: Env) {
   const ttl = integer(payload.expires_in ?? 600, 60);
   if (ttl > 3600)
     throw new HttpError(400, "link expiry must be between 60 and 3600 seconds");
+  if (
+    payload.manage_tokens !== undefined &&
+    typeof payload.manage_tokens !== "boolean"
+  )
+    throw new HttpError(400, "manage_tokens must be a boolean");
+  const management = payload.manage_tokens === true;
   const now = Date.now();
   const expires = Math.min(now + ttl * 1000, who.expires_at ?? Infinity);
   const tokenExpires = Math.min(now + 30 * DAY, who.expires_at ?? Infinity);
   const value = credential();
   const result = await env.DB.prepare(
-    `INSERT INTO browser_links(id,secret_hash,workspace_id,parent_token_id,expires_at,token_expires_at)
-    SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM browser_links WHERE parent_token_id=? AND expires_at>? AND redeemed_token_id IS NULL)<8`,
+    `INSERT INTO browser_links(id,secret_hash,workspace_id,parent_token_id,expires_at,token_expires_at,can_manage_tokens)
+    SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM browser_links WHERE parent_token_id=? AND expires_at>? AND redeemed_token_id IS NULL)<8`,
   )
     .bind(
       value.id,
@@ -61,6 +67,7 @@ export async function createLink(request: Request, env: Env) {
       who.id,
       expires,
       tokenExpires,
+      Number(management),
       who.id,
       now,
     )
@@ -77,6 +84,7 @@ export async function createLink(request: Request, env: Env) {
     url: url.href,
     expires_at: expires,
     browser_expires_at: tokenExpires,
+    can_manage_tokens: management,
   });
 }
 export async function redeemLink(request: Request, env: Env) {
@@ -93,6 +101,7 @@ export async function redeemLink(request: Request, env: Env) {
       expires_at: number;
       token_expires_at: number;
       redeemed_token_id: string | null;
+      can_manage_tokens: number;
     }>();
   if (!(await matches(secret, link?.secret_hash)) || !link)
     throw new HttpError(401, "invalid login link");
@@ -113,9 +122,9 @@ export async function redeemLink(request: Request, env: Env) {
       AND (SELECT COUNT(*) FROM api_tokens WHERE parent_token_id=? AND revoked_at IS NULL AND expires_at>?)<32`,
     ).bind(value.id, id, now, now, parent.id, now),
     env.DB.prepare(
-      `INSERT INTO api_tokens(id,workspace_id,secret_hash,scope,expires_at,parent_token_id)
-      SELECT ?,workspace_id,?,'read',?,parent_token_id FROM browser_links WHERE id=? AND redeemed_token_id=?`,
-    ).bind(value.id, await hash(value.secret), expires, id, value.id),
+      `INSERT INTO api_tokens(id,workspace_id,secret_hash,scope,expires_at,parent_token_id,can_manage_tokens,label,created_at,updated_at)
+      SELECT ?,workspace_id,?,'read',?,parent_token_id,can_manage_tokens,'Browser',?,? FROM browser_links WHERE id=? AND redeemed_token_id=?`,
+    ).bind(value.id, await hash(value.secret), expires, now, now, id, value.id),
   ]);
   if (!results[1].meta.changes)
     throw new HttpError(
@@ -126,6 +135,7 @@ export async function redeemLink(request: Request, env: Env) {
     token: value.id + "." + value.secret,
     expires_at: expires,
     workspace_id: link.workspace_id,
+    can_manage_tokens: !!link.can_manage_tokens,
   });
 }
 export async function createTicket(request: Request, env: Env) {

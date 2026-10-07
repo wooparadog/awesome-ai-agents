@@ -31,12 +31,59 @@ than claiming server revocation succeeded. Revoking/expiring the originating
 write credential or disabling its installation also invalidates its browser
 credentials. Existing operator read tokens keep their previous behavior.
 
+## Manage tokens
+
+Open **Tokens** in the web panel to manage your workspace credentials. Management
+requires an explicitly authorized browser login:
+
+```sh
+ai-agents web --manage-tokens
+```
+
+Open the generated link in the browser you want to authorize. Existing browser
+sessions and ordinary `ai-agents web` links remain read-only. The Tokens page
+shows the command when the current browser lacks management permission. Management
+logins retain the same single-use link, 30-day browser expiry, and parent-credential
+revocation rules as normal logins; the CLI output identifies the added permission.
+
+The Tokens page supports:
+
+- **Create:** choose a label, read/write role, and expiration (or no expiration).
+  Write tokens require an existing enabled installation. Their label defaults to
+  the reported hostname (falling back to the installation label until a hostname
+  is known); a custom label is preserved. The credential is shown
+  once in a copyable dialog, never in token lists or localStorage. Save it before
+  closing the dialog; a lost secret requires issuing a replacement token.
+- **Edit:** change the label or expiration. The role and installation are fixed.
+  Set an expiry within the next year, or no expiry for API tokens. Browser tokens
+  remain bounded by their original 30-day lifetime and originating credential.
+  Concurrent edits return a conflict so you can reload the latest metadata.
+- **Delete:** confirm revocation. The token stops authenticating immediately,
+  and browser credentials derived from it also lose access. The row moves to a
+  **Revoked tokens** section, collapsed by default with a count of loaded revoked
+  tokens. Expand it to inspect their metadata. Active and expired tokens stay in
+  the main list. Revoked metadata remains for up to 30 days before maintenance
+  removes it. The credential cannot be
+  restored. Reporting history and usage are preserved.
+
+The current browser token and its originating write token are protected from
+editing/deletion to avoid losing the active management session. Use another
+management session to change them, or Sign out to revoke the current browser.
+
+Tokens created in the panel are independent API credentials: signing out of the
+issuing browser does not revoke them. Created read tokens cannot manage tokens;
+created write tokens can report for their installation and generate browser login
+links (including management links), just like provisioned reporter credentials.
+No management privilege is silently added to existing tokens. Token metadata is
+loaded on demand, paginated at 100 rows, and never polled by the live dashboard.
+The workspace limit is 256 active tokens created through this API.
+
 ## Live data
 
 The browser creates a 60-second, single-use connection ticket with its read token,
 then sends the ticket in the WebSocket subprotocol header. No persistent token or
 connection ticket goes in a WebSocket URL. The subscription uses the collector's
-existing revision notifications, acknowledgements, five-minute authorization
+existing revision notifications, acknowledgements, on-demand authorization
 lease, and automatic ping/pong replies.
 
 Snapshots are fetched after subscription, on changed revisions, at freshness/day

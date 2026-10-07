@@ -13,7 +13,7 @@ All application endpoints require authentication; opening the URL without a toke
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
 | Database region | APAC |
 | Subscription class | `Subscriptions`, SQLite-backed, hibernating WebSockets |
-| Notification retry schedule | Every five minutes |
+| Notification recovery backstop | Hourly; normal publication is immediate |
 | Retention work | At most hourly, bounded indexed batches |
 | Machine reconciliation | At least five minutes between runs |
 | Presence freshness | Ten minutes |
@@ -227,3 +227,150 @@ ShellCheck, Lua/client checks, and five Chromium end-to-end tests. Browser tests
 cover live usage without idle polling, login persistence, consumed links, logout,
 metadata injection, filtering, mobile overflow, and outage recovery. Worker
 packaging dry-run also passed.
+
+
+## Standardized reporter domain (2026-09-10)
+
+All four reporter configurations (ArchDell, YogaArch, Karry, and Rain) now use
+`https://ai.wooparadog.info`. Updated ArchDell and Karry; YogaArch and Rain already
+had this URL. Restarted all four daemons to load their configuration. Credentials,
+installation IDs, and proxy settings were preserved. Changed files have adjacent
+`*.before-custom-domain.20260910134515` backups.
+
+Yoga's `~/.config/ai-agents/viewer.json` now uses the custom domain too. Its
+AwesomeWM `local.lua` and live cloud connection already used that domain.
+The workers.dev alias remains enabled on the Worker for compatibility.
+
+
+## Web token management (2026-09-10)
+
+Applied `0011_token_management.sql` to production D1 and deployed Worker version
+`ccf28b4b-4072-4f56-b76f-33f6bb3c3f99`. The web panel now has a Tokens page for
+creating read/write credentials, editing labels and expiry, and revoking tokens.
+Existing browser credentials remain read-only. A new login generated with
+`ai-agents web --manage-tokens` explicitly authorizes token management.
+
+Updated the Rust CLI binary on ArchDell, YogaArch, Karry, and Rain, preserving
+all reporter configuration, proxy settings, and hook registrations. Restarted
+all four user services successfully. Both default and management login links
+retain their existing single-use and expiry behavior.
+
+Live Chromium verification on `https://ai.wooparadog.info` created a temporary
+read token, confirmed snapshot access (200), edited its label, revoked it through
+the page, and confirmed subsequent authentication failed (401). Closing the
+creation dialog cleared its secret. The temporary management browser session
+was signed out and revoked after verification. No JavaScript errors occurred.
+Revoked metadata remains for bounded cleanup; existing reporter and viewer
+credentials were not changed by the verification.
+
+Validation passed: 34 collector runtime tests, four Rust unit tests, 21 Rust
+reporter/CLI/installer integration tests, 22 legacy reporter tests, and eight
+Chromium end-to-end tests, plus type checks, Clippy, formatting, ShellCheck, and
+Lua/client checks. Desktop/mobile token screens were visually reviewed. Tests
+cover authorization, workspace isolation, one-time secret disclosure, expiry,
+concurrent edits, protected login credentials, write-token installation binding,
+derived browser revocation, pagination, and revoked-token retention.
+
+
+## Hostname defaults and write-token rotation (2026-09-10)
+
+Applied `0012_installation_hostname.sql` and deployed Worker version
+`7d82ad71-f6c8-4548-8288-1ef197e9898d`. Reporter presence now records the Linux
+hostname independently of the installation display label. Write-token creation
+uses that hostname when a label is omitted/blank; the web form pre-fills it while
+preserving custom names. The provisioner defaults to its local hostname, with
+`--hostname` for another machine and `--label` for an explicit custom name.
+
+Regenerated the installed write credentials for `desktop`, `yoga-arch`, `karry`,
+and `rain`, labelled `ArchDell`, `YogaArch`, `Karry`, and `Rain`, respectively.
+Each replacement was installed atomically and authenticated successfully before
+the old credential was revoked. Updated the reporter binaries and restarted the
+four services. Installation IDs, configuration URLs, proxies, session identities,
+and usage state were preserved. Read credentials were not rotated.
+
+Private provisioning records are under
+`~/.config/ai-agents/collector/production/rotation-hostnames-20260910141122/` on
+ArchDell. Canonical operator `credential.token` and `identity.json` copies in each
+installation directory were also updated. Each reporting host retains the revoked
+old credential as `~/.config/ai-agents/write.token.before-hostname-rotation.20260910141122`.
+The old credentials are unusable; browser logins derived from them require a new
+`ai-agents web` link (add `--manage-tokens` for token administration).
+
+Validation passed: 35 collector tests, nine browser tests, Clippy/format checks,
+and release build. Provisioner checks covered default hostname, explicit remote
+hostname, custom label, and private credential permissions. All replacement
+credentials authenticated and all old credentials returned HTTP 401. The four
+daemons remained running with no queued uploads or quarantined records.
+
+
+## Collapsed revoked tokens (2026-09-10)
+
+Deployed Worker version `644a2382-3a20-4197-adb4-857bcfe9a20b`. Revoked token
+metadata now appears in a collapsed-by-default section with a count of loaded
+records. Active and expired credentials remain in the main list. The section
+supports keyboard expansion and preserves its open/closed state across list
+reloads. All nine browser tests and the Worker packaging check passed.
+
+
+## Jackson-Arch Codex installation (2026-09-10)
+
+Installed the Rust reporter on `Jackson-Arch` for user `wooparadog`, using a new
+installation `jackson-arch` and a dedicated write token labelled `Jackson-Arch`.
+The collector URL is `https://ai.wooparadog.info`. Deployment files are under
+`~/.local/share/ai-agents/rust/`, with the executable in `~/.local/bin/ai-agents`.
+The installer registered only Codex hooks in `~/.codex/hooks.json`; the checksum
+of existing Claude settings was unchanged.
+
+Enabled `ai-agents.service` and user lingering so the daemon starts with the user
+manager at boot and continues after logout. Verified the unit with systemd,
+credential authentication, a durable end-only installation hook, an empty upload
+queue, and no quarantined records. The write credential is mode 0600; private
+operator copies are in `~/.config/ai-agents/collector/production/jackson-arch/`
+on ArchDell. Codex may require accepting its hook-trust prompt before native
+agent events fire; the reporter hook transport was verified directly.
+
+
+## Pricing and idle workload rollout (2026-09-11)
+
+Deployed Worker version `fa3f752b-22b0-467d-8143-3a92226eac90` to
+`https://ai.wooparadog.info` with migrations `0013_accurate_pricing.sql` and
+`0014_idle_workload.sql`. The maintenance/recovery schedule is hourly. Empty idle
+reporters suppress repeated acknowledgements, presence publication is coalesced,
+and hidden browser tabs pause subscriptions. Live-process leases remain unchanged.
+The existing token-management functionality was preserved during deployment;
+its pre-existing working-tree changes are not part of the pricing/workload commit.
+
+Reset the `personal` workspace's telemetry at `1789100520357` milliseconds
+(2026-09-11 04:22:00.357 UTC). The transactional reset preserved credentials,
+installations and live run identities. Pre-reset usage replay is ignored.
+
+Updated and restarted the reporters on ArchDell, YogaArch and Karry. All three
+run the release binary with SHA-256
+`a0d6177dbf98185303f12f811205e1d93aeee695b65cb412a113aea47c9772c2`.
+The prior binary is retained as `~/.local/bin/ai-agents.before-pricing-idle-20260911`.
+Rain could not be resolved and Jackson's SSH connection timed out, so their
+reporter upgrades remain pending; rerun deployment when those hosts are reachable.
+
+The first migration attempt encountered the remote D1 parser's unparenthesized
+`SELECT CASE` limitation. The deployment command that followed was rolled back to
+`644a2382-3a20-4197-adb4-857bcfe9a20b`. After parenthesizing the expression and adding
+a regression check, both migrations succeeded remotely before the final deployment.
+The failed migration was verified to have rolled back its schema changes.
+
+Validation included 52 collector tests, 10 browser tests, 8 Rust unit tests,
+22 reporter integration tests, 25 shell tests, Clippy, formatting, release and
+Worker packaging checks, and 191 matching pricing-feed comparisons. The scoped
+commit separately passed 44 collector tests without unrelated token-management
+edits. The browser idle test advances thirty minutes while hidden and verifies
+no requests; the reporter idle test covers eight simulated hours plus restart
+and live-process renewal behavior.
+
+
+Follow-up deployment `9f62603f-947c-46f2-bfb3-378c70228c99` adds handling for
+Claude's `inference_geo: "not_available"` sentinel, observed during live validation.
+Migration `0015_unavailable_inference_geo.sql` queues the affected retained records
+for standard/global estimated pricing while preserving the raw metadata. Final
+collector validation passed 53 tests. No reporter binary change was required.
+One closed Claude session on ArchDell has a missing local transcript; it continues
+to mark usage coverage incomplete. Reporter uploads themselves had no errors or
+quarantined records after the rollout.

@@ -42,6 +42,9 @@ history-scanning query exists only in tests as a performance comparison.
 Rate sets are materialized with contributions, avoiding repeated pricing queries
 on every snapshot. Retained evidence can support an explicit rebuild if prices
 or the reporting timezone change; deleted evidence cannot be repriced precisely.
+Migration `0013_accurate_pricing.sql` adds a bounded repricing queue and transactional
+contribution replacement. The scheduled job and `scripts/reprice-usage.mjs` drain
+that queue. See [token pricing](pricing.md) for upgrade and accuracy details.
 Usage batches publish one workspace revision, instead of updating notification
 state twice for every individual record.
 

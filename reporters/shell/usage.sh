@@ -31,12 +31,12 @@ for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
   key=$(printf '%s\n%s' "$rid" "$path" | sha256sum | cut -d ' ' -f1)
   cursor="$STATE/cursors/$key.json"
   [ -f "$cursor" ] || printf '{"offset":0,"model":null}' > "$cursor"
-  if [ "$closed" = true ] && [ "$(jq -r '.finalized//false' "$cursor")" = true ]; then continue; fi
+  if [ "$closed" = true ] && [ "$(jq -r '.finalized//false' "$cursor")" = true ] && [ "$(jq -r '.version//0' "$cursor")" -ge 3 ]; then continue; fi
   offset=$(jq '.offset' "$cursor"); size=$(stat -c %s "$path")
   mode=$(jq -r '.mode//"cumulative"' "$cursor")
   # Re-read existing Codex transcripts once to recover authoritative per-response
   # usage. Stable response IDs make replay safe, including copied transcripts.
-  if [ "$agent" = codex ] && [ "$(jq -r '.version//0' "$cursor")" -lt 2 ]; then offset=0; fi
+  if [ "$(jq -r '.version//0' "$cursor")" -lt 3 ]; then offset=0; mode=cumulative; fi
   inode=$(stat -c '%d:%i' "$path")
   discard=$(jq -r '.discard//false' "$cursor")
   if [ "$size" -lt "$offset" ] || [ "$(jq -r '.inode//empty' "$cursor")" != "$inode" ]; then offset=0; discard=false; mode=cumulative; fi
@@ -81,7 +81,7 @@ for run in "$STATE"/runs/*.json "$STATE"/history/*.json; do
   finalmodel=$model
   [ ! -s "$work/parsed" ] || finalmodel=$(tail -n 1 "$work/parsed" | jq -r '.model//empty')
   jq -n --argjson offset "$((offset+bytes))" --argjson size "$size" --argjson closed "$closed" --arg model "$finalmodel" --arg inode "$inode" --arg mode "$mode" \
-    '{offset:$offset,model:$model,inode:$inode,mode:$mode,version:2,finalized:($closed and $offset>=$size)}' > "$work/cursor"
+    '{offset:$offset,model:$model,inode:$inode,mode:$mode,version:3,finalized:($closed and $offset>=$size)}' > "$work/cursor"
   mv "$work/cursor" "$cursor"
   [ "$((offset+bytes))" -ge "$size" ] || complete=false
 done

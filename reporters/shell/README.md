@@ -119,3 +119,7 @@ content from that path. A resumed execution has its own cursor and remains activ
 Closed local run records older than seven days are outside the cloud evidence
 window. The collector acknowledges older usage without storing it; full transcript
 history remains local, while cloud daily summaries last 30 days.
+
+Unchanged empty presence is suppressed after acknowledgement. Live processes still
+renew leases every five minutes, and coverage/drop changes send a fresh update.
+The acknowledgement cache survives timer invocations; failed requests are not cached.

@@ -5,6 +5,8 @@ export interface Identity {
   installation_id: string | null;
   scope: string;
   expires_at: number | null;
+  can_manage_tokens?: boolean;
+  parent_token_id?: string | null;
 }
 export async function authenticate(
   request: Request,
@@ -43,6 +45,18 @@ async function lookup(env: Env, id: string) {
     .bind(id, now, now)
     .first<TokenRow>();
 }
+// A previously authenticated WebSocket uses this only before publishing another
+// invalidation. Idle connections need no periodic HTTP reconnect or D1 query.
+export async function subscriptionIdentity(env: Env, id: string) {
+  const row = await lookup(env, id);
+  if (!row || row.scope !== "read") return null;
+  return {
+    expires_at: Math.min(
+      row.expires_at ?? Infinity,
+      row.parent_expiry ?? Infinity,
+    ),
+  };
+}
 // Only call after possession of an independently authenticated one-time ticket.
 export async function authenticateId(
   env: Env,
@@ -71,6 +85,8 @@ async function authorize(
     workspace_id: row.workspace_id,
     installation_id: row.installation_id,
     scope: row.scope,
+    can_manage_tokens: !!row.can_manage_tokens,
+    parent_token_id: row.parent_token_id,
     expires_at:
       row.parent_expiry == null
         ? row.expires_at

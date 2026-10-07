@@ -40,14 +40,15 @@ class CliTest(unittest.TestCase):
                 result=subprocess.run([str(BIN),'web','--expires','5m','--json'],env=env,text=True,capture_output=True,check=True)
                 self.assertTrue(json.loads(result.stdout)['url'].endswith('a'*43))
                 self.assertNotIn(token,result.stdout+result.stderr)
-                self.assertEqual(received, [('/v1/browser-links','Bearer '+token,{'schema_version':1,'expires_in':300})])
+                self.assertEqual(received, [('/v1/browser-links','Bearer '+token,{'schema_version':1,'expires_in':300,'manage_tokens':False})])
                 result=subprocess.run([str(BIN),'web','--expires','1s'],env=env,text=True,capture_output=True)
                 self.assertNotEqual(result.returncode,0);self.assertEqual(len(received),1)
                 # CLI and daemon share an explicit proxy from private config.
                 # The collector port has no listener; only the proxy can serve it.
                 (config/'config.json').write_text(json.dumps({'url':'http://127.0.0.1:9','installation_id':'test','proxy_url':f'http://127.0.0.1:{server.server_port}'}))
                 env.update(NO_PROXY='',no_proxy='')
-                result=subprocess.run([str(BIN),'web','--json'],env=env,text=True,capture_output=True,check=True)
+                result=subprocess.run([str(BIN),'web','--manage-tokens','--json'],env=env,text=True,capture_output=True,check=True)
                 self.assertEqual(received[-1][0],'http://127.0.0.1:9/v1/browser-links')
+                self.assertTrue(received[-1][2]['manage_tokens'])
                 self.assertTrue(json.loads(result.stdout)['url'].startswith('http://127.0.0.1:9/login#'))
         finally:server.shutdown();server.server_close()

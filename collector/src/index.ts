@@ -5,6 +5,7 @@ import {
   consumeTicket,
   logout,
 } from "./browser-auth";
+import { tokenRoutes } from "./tokens";
 import { servePanel } from "./panel";
 import { authenticate } from "./auth";
 import { ingest, presence, usage } from "./ingest";
@@ -12,6 +13,7 @@ import { body, HttpError, response, stamp, str } from "./protocol";
 import { snapshot } from "./snapshot";
 import { publishPending } from "./subscriptions";
 import { retain } from "./retention";
+import { reprice } from "./reprice";
 export { Subscriptions } from "./subscriptions";
 
 export default {
@@ -20,6 +22,12 @@ export default {
     try {
       const url = new URL(request.url),
         path = url.pathname;
+      if (
+        path === "/v1/token-access" ||
+        path === "/v1/tokens" ||
+        path.startsWith("/v1/tokens/")
+      )
+        return await tokenRoutes(request, env, ctx);
       if (!path.startsWith("/v1/")) return await servePanel(request, env);
       if (request.method === "POST") {
         if (path === "/v1/browser-links") return await createLink(request, env);
@@ -168,6 +176,7 @@ export default {
     }
   },
   async scheduled(_event, env, ctx) {
+    await reprice(env);
     ctx.waitUntil(publishPending(env));
     await retain(env);
   },

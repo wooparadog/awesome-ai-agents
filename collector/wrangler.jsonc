@@ -25,5 +25,5 @@
     "bindings": [{ "name": "SUBSCRIPTIONS", "class_name": "Subscriptions" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Subscriptions"] }],
-  "triggers": { "crons": ["*/5 * * * *"] },
+  "triggers": { "crons": ["0 * * * *"] },
 }

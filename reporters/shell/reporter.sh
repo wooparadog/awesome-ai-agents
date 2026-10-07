@@ -69,12 +69,27 @@ prune() {
 }
 post() {
   endpoint=$1; payloadfile=$2; budget=$3
+  if [ "$endpoint" = /v1/presence ]; then
+    # Compare accounting/liveness facts, not newly generated timestamps/sequences.
+    # Commit only acknowledgements; failed observations are always retried freshly.
+    presence_summary=$(jq -Sc --arg installation "$INSTALLATION" '. + {installation:$installation} | del(.observed_at) | .runs |= map(del(.sequence))' "$payloadfile")
+    if [ -f "$STATE/presence-last-shell.json" ] &&
+      jq -e --argjson summary "$presence_summary" --argjson time "$(now)" \
+        '.summary==$summary and .observed_at<=$time and (($summary.runs|length)==0 or $time-.observed_at<300000)' \
+        "$STATE/presence-last-shell.json" >/dev/null; then
+      result=200
+      return
+    fi
+  fi
   header="$STATE/header.$$"
   printf 'Authorization: Bearer %s\n' "$(cat "$CONFIG/write.token")" > "$header"
   result=$(curl --silent --show-error --connect-timeout "$budget" --max-time "$budget" \
     --header "@$header" --header 'Content-Type: application/json' --data-binary "@$payloadfile" \
     --dump-header "$STATE/response-headers.$$" --output "$STATE/response.$$" --write-out '%{http_code}' "$URL$endpoint" 2>/dev/null) || result=000
   rm -f "$header"
+  if [ "$endpoint" = /v1/presence ] && [ "$result" = 200 ]; then
+    jq --argjson summary "$presence_summary" '{observed_at,summary:$summary}' "$payloadfile" | atomic "$STATE/presence-last-shell.json"
+  fi
 }
 schedule_retry() {
   attempts=$(cat "$STATE/attempts" 2>/dev/null || printf '0'); attempts=$((attempts+1))

@@ -5,6 +5,13 @@ export async function retain(env: Env, now = Date.now()): Promise<void> {
     "SELECT ready FROM statistics_state WHERE id=1",
   ).first<{ ready: number }>();
   if (!state?.ready) return;
+  // Finish repricing retained evidence before it can be frozen or deleted.
+  if (
+    await env.DB.prepare(
+      "SELECT 1 FROM usage_records WHERE archived=0 AND pricing_version='' LIMIT 1",
+    ).first()
+  )
+    return;
   const claim = await env.DB.prepare(
     `INSERT INTO maintenance_runs(id,last_run) VALUES('compact',?)
     ON CONFLICT(id) DO UPDATE SET last_run=excluded.last_run WHERE last_run<=?`,
@@ -23,6 +30,12 @@ export async function retain(env: Env, now = Date.now()): Promise<void> {
       AND (n.occurred_at,n.id)>(u.occurred_at,u.id) AND n.occurred_at<?))
     ORDER BY u.occurred_at LIMIT 500`;
   await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM rate_limits WHERE token_id IN (SELECT id FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at<? ORDER BY revoked_at LIMIT 500)",
+    ).bind(summaryCutoff),
+    env.DB.prepare(
+      "DELETE FROM api_tokens WHERE id IN (SELECT id FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at<? ORDER BY revoked_at LIMIT 500)",
+    ).bind(summaryCutoff),
     env.DB.prepare(
       "DELETE FROM browser_links WHERE id IN (SELECT id FROM browser_links WHERE expires_at<=? LIMIT 500)",
     ).bind(now),
