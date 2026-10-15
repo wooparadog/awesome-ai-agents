@@ -16,6 +16,12 @@
 --   colors                   { asking, done, dim } used in the popup
 --   notification_preset      naughty preset for the hover popup
 --   popup_max_width          pixel limit (default: DPI-scaled 1000, at most 80% of the screen)
+--   notify_finished          cloud mode: notify when a run on another machine finishes
+--                            a turn (default true); `false` disables, a table is
+--                            merged into the naughty.notify arguments
+--   local_installations      installation ids/machine names treated as this desktop
+--                            (default: the reporter config's installation_id and
+--                            the hostname)
 --   claude_projects          default ~/.claude/projects
 --   codex_sessions           default ~/.codex/sessions
 --   cache_path               default $XDG_CACHE_HOME/awesome/ai-agents.json
@@ -37,6 +43,7 @@ local gears = require("gears")
 local base = (...):gsub("%.init$", "") .. "."
 local cost = require(base .. "cost")
 local sessions = require(base .. "sessions")
+local finished = require(base .. "finished")
 
 local AGENT_LABEL = { claude = "claude code", codex = "codex" }
 local STATE_LABEL = { asking = "needs you", busy = "working", done = "done", idle = "idle" }
@@ -211,6 +218,33 @@ local function popup_text(colors, snap)
   return table.concat(lines, "\n")
 end
 
+-- This desktop's own reporter identity, so its runs are not announced.
+local function local_installations()
+  local ids = {}
+  local config = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") or "") .. "/.config") .. "/ai-agents/config.json"
+  local fh = io.open(config, "r")
+  if fh then
+    local ok, value = pcall(require(base .. "dkjson").decode, fh:read("*a"), 1, nil)
+    fh:close()
+    if ok and type(value) == "table" and type(value.installation_id) == "string" then
+      ids[#ids + 1] = value.installation_id
+    end
+  end
+  fh = io.open("/proc/sys/kernel/hostname", "r")
+  if fh then
+    ids[#ids + 1] = fh:read("*l")
+    fh:close()
+  end
+  return ids
+end
+
+local function notify_finished(extra, run)
+  naughty.notify(gears.table.crush({
+    title = string.format("%s finished", AGENT_LABEL[run.agent] or run.agent or "agent"),
+    text = escape((run.machine or "?") .. " / " .. project_label(run.cwd)),
+  }, extra))
+end
+
 -- ── Factory ──────────────────────────────────────────────────────────────────
 
 local function factory(args)
@@ -226,11 +260,20 @@ local function factory(args)
   }, args.colors or {})
 
   local popup
+  local detect = args.cloud
+    and args.notify_finished ~= false
+    and finished(args.local_installations or local_installations())
+  local notify_args = type(args.notify_finished) == "table" and args.notify_finished or {}
 
   function ai.update()
     local snap = tracker.snapshot()
     snap.cost = snap.cost or cost.totals()
     ai.state = snap
+    if detect then
+      for _, run in ipairs(detect(snap)) do
+        notify_finished(notify_args, run)
+      end
+    end
     settings(snap, ai.widget)
     if popup then
       -- naughty.widget.message tracks the notification's `message` property, so

@@ -18,3 +18,4 @@ shellcheck hook.sh install-hooks.sh reporters/shell/*.sh clients/awesomewm/local
 stylua --config-path clients/awesomewm/stylua.toml --check init.lua clients/awesomewm
 lua5.4 clients/awesomewm/tests/cloud_state.lua
 lua5.4 clients/awesomewm/tests/entrypoints.lua
+lua5.4 clients/awesomewm/tests/finished.lua

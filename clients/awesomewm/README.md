@@ -58,6 +58,8 @@ boundaries. The handle exposes `widget`, `state`, `update()`, `show_popup()`,
 | `widget` | Existing widget; defaults to a textbox |
 | `colors` | Popup colors: `asking`, `done`, `dim` |
 | `notification_preset` | AwesomeWM notification preset |
+| `notify_finished` | Notify when a live run on another machine goes from busy to done (default `true`; `false` disables; a table is merged into the `naughty.notify` arguments, e.g. `{ app_name = "awesome" }`) |
+| `local_installations` | Installation IDs or machine names treated as this desktop and never announced; defaults to the reporter config's `installation_id` and the hostname |
 | `popup_max_width` | Maximum popup width in pixels; defaults to DPI-scaled 1,000 and is capped at 80% of the screen work area |
 
 The popup grows with its content up to that limit and wraps longer lines only
@@ -86,6 +88,7 @@ hook first reports them. `sessions.log()` exposes recent local events for debugg
 | --- | --- |
 | `init.lua` | Wibar and popup presentation |
 | `cloud.lua`, `cloud_state.lua` | Collector transport, reconnects, and local freshness expiry |
+| `finished.lua` | Detects remote runs that finished a turn, for notifications |
 | `local-hook.sh`, `sessions.lua` | Legacy local event transport and session tracking |
 | `cost.lua`, `pricing.lua`, `util.lua` | Legacy local accounting and filesystem helpers |
 | `dkjson.lua` | Vendored JSON library |
@@ -101,6 +104,7 @@ From the repository root:
 stylua --config-path clients/awesomewm/stylua.toml --check init.lua clients/awesomewm
 lua5.4 clients/awesomewm/tests/cloud_state.lua
 lua5.4 clients/awesomewm/tests/entrypoints.lua
+lua5.4 clients/awesomewm/tests/finished.lua
 lua5.4 clients/awesomewm/tests/cloud_smoke.lua http://127.0.0.1:8787 /path/to/read.token
 ```
 
