@@ -64,6 +64,18 @@ class DaemonTest(unittest.TestCase):
         return subprocess.run([str(BIN), *args], env=self.env, input=json.dumps(payload) if payload else None, text=True, capture_output=True, check=True, timeout=3)
     def hook(self, event='Stop', agent='codex', sid='session', **extra):
         return self.command('hook', agent, event, payload={'session_id':sid, **extra})
+    def orphan_hook(self, event='Stop', agent='codex', sid='session', **extra):
+        """Run a hook reparented away from its agent, so its process is unidentified."""
+        stdin_r,stdin_w=os.pipe();pid_r,pid_w=os.pipe()
+        if os.fork()==0:
+            if os.fork()==0:
+                os.write(pid_w,str(os.getpid()).encode());os.dup2(stdin_r,0);os.close(stdin_w)
+                os.execve(str(BIN),[str(BIN),'hook',agent,event],self.env)
+            os._exit(0)
+        os.wait();os.close(stdin_r);os.close(pid_w)
+        os.write(stdin_w,json.dumps({'session_id':sid,**extra}).encode());os.close(stdin_w)
+        pid=os.read(pid_r,32).decode();os.close(pid_r)
+        self.wait(lambda:not Path('/proc/'+pid).exists())
     def start(self):
         self.daemon = subprocess.Popen([str(BIN), 'daemon'], env=self.env, stdout=self.log, stderr=self.log)
         self.wait(lambda: (self.dir/'state/daemon.sock').exists())
@@ -314,6 +326,43 @@ class DaemonTest(unittest.TestCase):
         self.command('reconcile')
         self.wait(lambda:len(diagnostics('usage coverage issue cleared'))==2)
         self.assertEqual(diagnostics('usage coverage issue cleared')[1]['reason'],'outside_retention')
+
+    def test_unidentified_run_is_superseded_when_its_session_resumes(self):
+        self.orphan_hook('UserPromptSubmit',sid='resumed')
+        self.start();self.drain()
+        [placeholder]=self.events()
+        self.assertEqual(placeholder['data']['pid'],0)
+        log=(self.dir/'daemon.log').read_text()
+        diagnostic=json.loads(log.split('agent process not identified: ',1)[1].split('\n',1)[0])
+        self.assertEqual(diagnostic['native_session_id'],'resumed')
+        self.assertIsInstance(diagnostic['ancestry'],list)
+        self.assertNotIn('ancestry',placeholder)
+        self.hook('UserPromptSubmit',sid='resumed');self.drain()
+        # Separate executions have no relative order; the outbox may send either first.
+        ended,current=sorted(self.events()[1:],key=lambda e:e['source_event']!='SessionEnd')
+        self.assertEqual((ended['run_id'],ended['source_event'],ended['data']['reason']),(placeholder['run_id'],'SessionEnd','superseded'))
+        self.assertNotEqual(current['execution_id'],placeholder['execution_id'])
+        self.hook('Stop',sid='resumed');self.drain()
+        self.assertEqual([e['source_event'] for e in self.events()][3:],['Stop'])
+
+    def test_quiet_unidentified_run_ends_and_later_hooks_reopen_it(self):
+        transcript=self.dir/'transcript.jsonl';transcript.write_text('')
+        self.orphan_hook('Stop',agent='claude',sid='quiet',transcript_path=str(transcript))
+        self.start();self.drain()
+        runfile=next((self.dir/'state/runs').glob('*.json'))
+        old=time.time()-7*3600
+        os.utime(runfile,(old,old))
+        self.command('reconcile');time.sleep(.2)
+        self.assertEqual(len(self.events()),1,'a growing transcript keeps the run open')
+        os.utime(transcript,(old,old))
+        self.command('reconcile')
+        self.wait(lambda:len(self.events())==2)
+        first,ended=self.events()
+        self.assertEqual((ended['run_id'],ended['source_event'],ended['data']['reason']),(first['run_id'],'SessionEnd','unidentified_idle'))
+        self.orphan_hook('UserPromptSubmit',agent='claude',sid='quiet');self.drain()
+        reopened=self.events()[-1]
+        self.assertEqual(reopened['execution_id'],first['execution_id'])
+        self.assertEqual(reopened['run_generation'],first['run_generation']+1)
 
     def test_write_ahead_recovery(self):
         dest=self.dir/'state/history/test.json'

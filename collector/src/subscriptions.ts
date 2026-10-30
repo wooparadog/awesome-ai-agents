@@ -200,6 +200,20 @@ export class Subscriptions extends DurableObject<Env> {
   }
 }
 
+// Statements that advance a workspace revision and queue its notification.
+export function revisionBump(env: Env, workspace: string) {
+  return [
+    env.DB.prepare("UPDATE workspaces SET revision=revision+1 WHERE id=?").bind(
+      workspace,
+    ),
+    env.DB.prepare(
+      `INSERT INTO notification_outbox(workspace_id,pending_revision)
+      SELECT id,revision FROM workspaces WHERE id=?
+      ON CONFLICT(workspace_id) DO UPDATE SET pending_revision=excluded.pending_revision,next_attempt_at=0`,
+    ).bind(workspace),
+  ];
+}
+
 export async function publishPending(
   env: Env,
   workspace?: string,

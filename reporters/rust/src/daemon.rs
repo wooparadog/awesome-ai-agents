@@ -20,6 +20,9 @@ use tokio::{
 const RECONCILE: Duration = Duration::from_secs(30);
 const HEARTBEAT: Duration = Duration::from_secs(300);
 const HORIZON: u64 = 7 * 86400 * 1000;
+// A run whose agent process was never identified cannot be checked for exit.
+// Treat it as ended once neither hooks nor its transcript show activity.
+const UNIDENTIFIED_IDLE: u64 = 6 * 3600 * 1000;
 const CAPACITY: u64 = 32 * 1024 * 1024;
 
 pub fn validate_url(url: &str) -> Result<()> {
@@ -132,6 +135,28 @@ impl Engine {
                 json!({"execution_id":store::id(),"fingerprint":value["fingerprint"],"agent":value["agent"],"pid":value["pid"],"sequence":0,"run_generation":0})
             };
             let mut writes = Vec::new();
+            let time = value["observed_at"].as_u64().unwrap_or(store::now());
+            if value["pid"].as_u64().unwrap_or(0) == 0 {
+                let diagnostic = json!({"event":"agent_unidentified","agent":value["agent"],
+                    "native_session_id":value["native_session_id"],"source_event":value["source_event"],"ancestry":value["ancestry"]});
+                eprintln!("agent process not identified: {diagnostic}");
+            } else {
+                // The session now runs in an identified process, so an earlier
+                // unidentified placeholder for it can no longer be current.
+                let placeholder = self.paths.state.join("runs").join(format!(
+                    "{}.json",
+                    store::hash(&hooks::unidentified(
+                        value["agent"].as_str().unwrap_or(""),
+                        value["native_session_id"].as_str().unwrap()
+                    ))
+                ));
+                if placeholder != dest && placeholder.exists() {
+                    let mut old = store::read(&placeholder)?;
+                    if old["closed"] != true {
+                        writes.extend(self.end_run(&placeholder, &mut old, "superseded", time));
+                    }
+                }
+            }
             if run["native_session_id"] != value["native_session_id"] || run["closed"] == true {
                 if let Some(id) = run["run_id"].as_str().map(str::to_owned) {
                     // The collector supersedes older generations when the new
@@ -176,7 +201,7 @@ impl Engine {
                 &mut run,
                 source,
                 value["data"].clone(),
-                value["observed_at"].as_u64().unwrap_or(store::now()),
+                time,
                 value["id"].as_str().unwrap_or("").to_owned(),
             ));
             if source == "SessionEnd" {
@@ -219,26 +244,29 @@ impl Engine {
             run["asking"] = json!(false);
             store::write(&path, &run)?;
         }
-        if run["closed"] != true && run["pid"].as_u64().unwrap_or(0) > 0 && !hooks::live(&run) {
-            let event = self.event(
-                &mut run,
-                "SessionEnd",
-                json!({"reason":"process_gone"}),
-                store::now(),
-                store::id(),
-            );
-            run["closed"] = json!(true);
-            run["asking"] = json!(false);
-            self.paths
-                .transaction(vec![event, (path.clone(), run.clone())], None)?;
-            self.presence = true;
-        }
         let mut transcript = run["transcript"].as_str().map(PathBuf::from);
         if !transcript.as_ref().is_some_and(|p| p.is_file()) && run["agent"] == "codex" {
             transcript = usage::discover(run["native_session_id"].as_str().unwrap_or(""));
             if let Some(p) = &transcript {
                 run["transcript"] = json!(p);
                 store::write(&path, &run)?
+            }
+        }
+        if run["closed"] != true {
+            let reason = if run["pid"].as_u64().unwrap_or(0) > 0 {
+                (!hooks::live(&run)).then_some("process_gone")
+            } else {
+                // Hooks rewrite the run file; a working agent grows its transcript.
+                let active = transcript
+                    .as_deref()
+                    .map_or(0, modified)
+                    .max(modified(&path));
+                (active + UNIDENTIFIED_IDLE < store::now()).then_some("unidentified_idle")
+            };
+            if let Some(reason) = reason {
+                let writes = self.end_run(&path, &mut run, reason, store::now());
+                self.paths.transaction(writes, None)?;
+                self.presence = true;
             }
         }
         if let Some(p) = transcript.filter(|p| p.is_file()) {
@@ -272,6 +300,25 @@ impl Engine {
             self.clear_missing_transcript(&run, "closed_without_observed_transcript");
         }
         self.finish_scan()
+    }
+    // Closes a run locally and queues the SessionEnd that closes it remotely.
+    fn end_run(
+        &self,
+        path: &Path,
+        run: &mut Value,
+        reason: &str,
+        time: u64,
+    ) -> Vec<(PathBuf, Value)> {
+        let event = self.event(
+            run,
+            "SessionEnd",
+            json!({"reason":reason}),
+            time,
+            store::id(),
+        );
+        run["closed"] = json!(true);
+        run["asking"] = json!(false);
+        vec![event, (path.to_owned(), run.clone())]
     }
     fn log_missing_transcript(&mut self, run: &Value) {
         let id = run["run_id"].as_str().unwrap_or("");
