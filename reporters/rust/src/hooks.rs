@@ -15,8 +15,11 @@ pub fn process(pid: u64) -> Option<(String, u64)> {
     let boot = fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
     Some((format!("{}:{pid}:{start}", boot.trim()), parent))
 }
-pub fn ancestor() -> u64 {
+// Returns the nearest agent ancestor, or 0 with the command names that were
+// walked so an unidentified hook can be diagnosed locally.
+pub fn ancestor() -> (u64, Vec<String>) {
     let mut pid = u64::from(std::process::id());
+    let mut chain = Vec::new();
     for _ in 0..16 {
         let Some((_, parent)) = process(pid) else {
             break;
@@ -25,13 +28,17 @@ pub fn ancestor() -> u64 {
         if pid <= 1 {
             break;
         }
-        if fs::read_to_string(format!("/proc/{pid}/comm"))
-            .is_ok_and(|s| s.starts_with("codex") || s.starts_with("claude"))
-        {
-            return pid;
+        let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
+        if comm.starts_with("codex") || comm.starts_with("claude") {
+            return (pid, chain);
         }
+        chain.push(comm.trim_end().to_owned());
     }
-    0
+    (0, chain)
+}
+// Without a process, the session itself keys one placeholder execution.
+pub fn unidentified(agent: &str, sid: &str) -> String {
+    format!("unknown:{agent}:{sid}")
 }
 pub fn live(run: &Value) -> bool {
     !run["closed"].as_bool().unwrap_or(false)
@@ -57,10 +64,10 @@ pub fn envelope(agent: &str, event: &str, payload: &Value) -> Result<Value> {
         .or_else(|| payload["sessionId"].as_str())
         .filter(|s| !s.is_empty() && s.len() <= 200 && !s.chars().any(char::is_control))
         .ok_or_else(|| anyhow::anyhow!("missing session ID"))?;
-    let pid = ancestor();
+    let (pid, chain) = ancestor();
     let fingerprint = process(pid)
         .map(|v| v.0)
-        .unwrap_or_else(|| format!("unknown:{agent}:{sid}"));
+        .unwrap_or_else(|| unidentified(agent, sid));
     let message = payload["message"].as_str().unwrap_or("").to_lowercase();
     let notification = payload["notification_type"]
         .as_str()
@@ -93,7 +100,7 @@ pub fn envelope(agent: &str, event: &str, payload: &Value) -> Result<Value> {
         .as_str()
         .filter(|s| s.len() <= 4096);
     Ok(
-        json!({"id":store::id(),"observed_at":store::now(),"agent":agent,"source_event":event,"native_session_id":sid,"pid":pid,"fingerprint":fingerprint,"transcript":transcript,"data":data}),
+        json!({"id":store::id(),"observed_at":store::now(),"agent":agent,"source_event":event,"native_session_id":sid,"pid":pid,"fingerprint":fingerprint,"transcript":transcript,"ancestry":(pid == 0).then_some(chain),"data":data}),
     )
 }
 pub fn report(paths: &Paths, agent: &str, event: &str) -> Result<()> {

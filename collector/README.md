@@ -211,7 +211,9 @@ from revoked write tokens require fresh login links.
 
 ## Idle workload
 
-Maintenance/recovery cron runs hourly. Normal event/usage/presence writes publish
+Maintenance/recovery cron runs hourly. It also ends open runs that have had no
+event or presence for seven days (`end_reason` `abandoned`), at most 500 per pass,
+so a retired machine or unidentified process cannot stay listed forever. Normal event/usage/presence writes publish
 immediately; delivered outbox rows are excluded by an index. Subscription objects
 skip storage/alarm work with no listeners. Idle viewer connections hibernate and
 revalidate authorization before sending new invalidations when their cached check

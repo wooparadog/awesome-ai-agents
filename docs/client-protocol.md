@@ -290,7 +290,12 @@ capability), and `dropped` (diagnostic count). Each run observation has `run_id`
 `execution_id`, and an increasing `sequence`. Presence is freshly observed and sent
 directly; it must not be replayed from the historical outbox to renew a lease.
 Process disappearance is a lifecycle `SessionEnd` observation with an appropriate
-reason. Absence of hooks cannot establish process death.
+reason, such as `process_gone`. Absence of hooks cannot establish the death of an
+identified process. A run whose agent process could not be identified has no such
+evidence, so the reporter ends it as `superseded` when its session continues in an
+identified process, or as `unidentified_idle` after six hours without hooks or
+transcript growth; a later hook starts a new run for it. The collector ends any run
+with no event or presence for seven days as `abandoned`.
 
 Usage records include `run_id`, `agent`, `provider`, `native_record_id`, `stream_id`,
 `counter_epoch`, `model`, `occurred_at`, `measurement_kind` (`delta` or `cumulative`),

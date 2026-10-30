@@ -14,6 +14,7 @@ import { snapshot } from "./snapshot";
 import { publishPending } from "./subscriptions";
 import { retain } from "./retention";
 import { reprice } from "./reprice";
+import { endAbandoned } from "./abandoned";
 export { Subscriptions } from "./subscriptions";
 
 export default {
@@ -177,6 +178,7 @@ export default {
   },
   async scheduled(_event, env, ctx) {
     await reprice(env);
+    await endAbandoned(env);
     ctx.waitUntil(publishPending(env));
     await retain(env);
   },

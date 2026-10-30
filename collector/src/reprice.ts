@@ -1,4 +1,5 @@
 import { catalog, resolveRates, type Counters } from "./pricing";
+import { revisionBump } from "./subscriptions";
 
 export type PriceRecord = Counters & {
   workspace_id: string;
@@ -43,20 +44,8 @@ export async function reprice(env: Env): Promise<number> {
       row.pricing_json,
     ),
   );
-  for (const workspace of new Set(rows.map((row) => row.workspace_id))) {
-    statements.push(
-      env.DB.prepare(
-        "UPDATE workspaces SET revision=revision+1 WHERE id=?",
-      ).bind(workspace),
-    );
-    statements.push(
-      env.DB.prepare(
-        `INSERT INTO notification_outbox(workspace_id,pending_revision)
-      SELECT id,revision FROM workspaces WHERE id=?
-      ON CONFLICT(workspace_id) DO UPDATE SET pending_revision=excluded.pending_revision,next_attempt_at=0`,
-      ).bind(workspace),
-    );
-  }
+  for (const workspace of new Set(rows.map((row) => row.workspace_id)))
+    statements.push(...revisionBump(env, workspace));
   await env.DB.batch(statements);
   return rows.length;
 }

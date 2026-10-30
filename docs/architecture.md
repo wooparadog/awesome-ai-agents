@@ -132,7 +132,7 @@ In one D1 batch: validate identity relationships, insert the event idempotently,
 
 The state set is `idle`, `busy`, `asking`, `done`, `ended`, with `unknown` for a run first observed without a state-bearing event. Preserve current semantics: compaction does not reset a busy run; unknown notifications do not change state; completion marks a turn done, not the process dead. `SessionEnd` or confirmed local process disappearance closes a run. Switching native sessions in a process closes the previous run as `superseded`.
 
-**Liveness and attention.** Track freshness separately from activity. A quiet session might be awaiting input for hours; lack of hooks cannot establish death. Never expire it into `ended` merely because a timer elapsed.
+**Liveness and attention.** Track freshness separately from activity. A quiet session might be awaiting input for hours; lack of hooks cannot establish death. Never expire it into `ended` merely because a timer elapsed. Two bounded exceptions exist because otherwise no evidence could ever end the run: the reporter ends a run whose process it never identified after six quiet hours, and the collector ends a run with no event or presence beyond the seven-day retry horizon.
 
 Scheduled reconciliation checks known process fingerprints and reports which tracked executions are alive or gone. It must report per-execution evidence: contact from one active session does not prove every process on that machine is alive. The presence interval is five minutes, with `stale` after ten minutes. Hooks-only installations expose freshness as `unverified`. Stale/unverified sessions remain visible separately from the confirmed-live count, with their last known state.
 
