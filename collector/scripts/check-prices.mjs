@@ -30,11 +30,20 @@ for (const row of feed.prices) {
     row.id.startsWith("gpt-image")
   )
     continue;
-  const match = row.id.match(/-(200|272)k$/);
+  const match = row.id.match(/-(\d+)k$/);
   const id = match ? row.id.slice(0, -match[0].length) : row.id;
   const model = modelPrice(row.vendor, id);
   if (!model) {
     missing.push(key);
+    continue;
+  }
+  if (match && model.context_threshold !== Number(match[1]) * 1000) {
+    mismatches.push({
+      model: key,
+      metric: "context_threshold",
+      catalog: model.context_threshold ?? null,
+      feed: Number(match[1]) * 1000,
+    });
     continue;
   }
   const rates = match ? model.tiers.standard.long : model.tiers.standard.short;

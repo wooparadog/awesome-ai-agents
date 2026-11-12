@@ -16,6 +16,10 @@ beforeAll(async () => {
   await applyD1Migrations(env.DB, TEST_MIGRATIONS);
 });
 const when = Date.parse(catalog.verified_at) + 12 * 3600000;
+// Each model keeps its own evidence date; price it inside that verification window.
+const verifiedWhen = (model: string) =>
+  Date.parse(catalog.models[model]?.verified_at ?? catalog.verified_at) +
+  12 * 3600000;
 const direct: PricingContext = {
   service_tier: "standard",
   billing_provider: "direct",
@@ -29,7 +33,14 @@ function total(
   kind = "delta",
 ) {
   const provider = model.startsWith("claude") ? "anthropic" : "openai";
-  const rates = resolveRates(provider, model, kind, counters, pricing, when);
+  const rates = resolveRates(
+    provider,
+    model,
+    kind,
+    counters,
+    pricing,
+    verifiedWhen(model),
+  );
   return summarize([
     {
       agent: "test",

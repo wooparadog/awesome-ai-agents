@@ -5,10 +5,14 @@ or provider invoices. Tool calls, hosted containers, storage, taxes, credits,
 private discounts, and subscription allowances are not included.
 
 `collector/pricing/catalog.json` is the pricing snapshot, refreshed on
-October 7, 2026. It includes GPT-6 Sol/Luna, GPT-6.1 Sol, Claude Opus/Sonnet 5.5,
-and the existing text-model catalog. The repeatable updater uses the
+November 12, 2026. It includes GPT-6 Sol/Luna, GPT-6.1 Sol/Terra, Claude
+Opus/Sonnet/Haiku 5.5, Claude Fable/Mythos 5.2, and the existing text-model
+catalog. The repeatable updater uses the
 [LLM Prices JSON feed](https://www.llm-prices.com/current-v1.json) by default
-(the snapshot used for this refresh is dated September 29). Input, output,
+(the snapshot used for this refresh is dated November 10). Models added from
+the feed alone (GPT-6.1 Terra, Claude Haiku 5.5, Claude Fable/Mythos 5.2) have
+standard input, cached-input, and output rates only; their cache-write,
+service-tier, and regional prices still need a provider review. Input, output,
 and cached-input prices are cross-checked against the feed; cache writes,
 service tiers, and geographic rules come from the
 [OpenAI pricing tables](https://developers.openai.com/api/docs/pricing) and

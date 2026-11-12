@@ -1,6 +1,6 @@
 {
-  "verified_at": "2026-10-07T00:00:00Z",
-  "catalog_version": "2026-10-07",
+  "verified_at": "2026-11-12T00:00:00Z",
+  "catalog_version": "2026-11-12",
   "sources": {
     "openai": {
       "url": "https://developers.openai.com/api/docs/pricing.md",
@@ -12,9 +12,9 @@
     },
     "feed": {
       "url": "https://www.llm-prices.com/current-v1.json",
-      "sha256": "2efcc88a4a2a17113a43e2ed581ca67214847d59273141f08560afb31cba438c",
-      "updated_at": "2026-09-29"
+      "sha256": "fbb6020788409c34918e42db17543b3367d8c77d572ed052116821da00ba73d9",
+      "updated_at": "2026-11-10"
     }
   },
-  "rules_sha256": "ce02ac8325bf886704d40d5a56f21a543abf7ad486bc54826658ec85c944649f"
+  "rules_sha256": "f32ee333703801ef863590612d9ed208bc971312288e5bb9ff9a28796c2c57d1"
 }

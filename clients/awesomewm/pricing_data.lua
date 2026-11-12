@@ -1,4 +1,4 @@
--- Generated from collector/pricing/catalog.json (2026-10-07).
+-- Generated from collector/pricing/catalog.json (2026-11-12).
 -- Legacy daily aggregates cannot recover per-request context or billing tiers.
 -- stylua: ignore
 return { models = {
@@ -12,9 +12,12 @@ return { models = {
   ["claude-3-opus"] = { input = 15, cache_read = 1.5, output = 75, cache_write_5m = 18.75, cache_write_1h = 30 },
   ["claude-fable-5"] = { cache_write_1h = 20, cache_write_5m = 12.5, cache_read = 1, output = 50, input = 10 },
   ["claude-fable-5-1"] = { cache_write_1h = 20, cache_write_5m = 12.5, cache_read = 0.25, output = 50, input = 10 },
+  ["claude-fable-5-2"] = { input = 8, cache_read = 0.2, output = 40 },
   ["claude-haiku-4-5"] = { cache_write_1h = 2, cache_write_5m = 1.25, cache_read = 0.1, output = 5, input = 1 },
+  ["claude-haiku-5-5"] = { input = 0.1, cache_read = 0.01, output = 0.5 },
   ["claude-mythos-5"] = { cache_write_1h = 20, cache_write_5m = 12.5, cache_read = 1, output = 50, input = 10 },
   ["claude-mythos-5-1"] = { cache_write_1h = 20, cache_write_5m = 12.5, cache_read = 0.25, output = 50, input = 10 },
+  ["claude-mythos-5-2"] = { input = 8, cache_read = 0.2, output = 40 },
   ["claude-opus-4"] = { cache_write_1h = 30, cache_write_5m = 18.75, cache_read = 1.5, output = 75, input = 15 },
   ["claude-opus-4-1"] = { cache_write_1h = 30, cache_write_5m = 18.75, cache_read = 1.5, output = 75, input = 15 },
   ["claude-opus-4-5"] = { cache_write_1h = 10, cache_write_5m = 6.25, cache_read = 0.5, output = 25, input = 5 },
@@ -71,6 +74,7 @@ return { models = {
   ["gpt-6-luna"] = { input = 0.1, cache_read = 0.01, cache_write_5m = 0.125, output = 0.5 },
   ["gpt-6-sol"] = { input = 2, cache_read = 0.2, cache_write_5m = 2.5, output = 10 },
   ["gpt-6.1-sol"] = { input = 2, cache_read = 0.1, cache_write_5m = 2.5, output = 10 },
+  ["gpt-6.1-terra"] = { input = 1, cache_read = 0.05, output = 5 },
   ["gpt-rosalind-research"] = { input = 5, cache_read = 0.5, output = 25 },
   ["o1"] = { input = 15, cache_read = 7.5, output = 60 },
   ["o1-mini"] = { input = 1.1, cache_read = 0.55, output = 4.4 },
@@ -92,4 +96,6 @@ return { models = {
   ["claude-3.7-sonnet"] = "claude-3-7-sonnet",
   ["claude-sonnet-5.5"] = "claude-sonnet-5-5",
   ["claude-opus-5.5"] = "claude-opus-5-5",
+  ["claude-sonnet-4.6"] = "claude-sonnet-4-6",
+  ["claude-haiku-5.5"] = "claude-haiku-5-5",
 } }
