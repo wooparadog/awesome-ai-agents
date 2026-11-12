@@ -16,6 +16,7 @@ export type PricingContext = {
 };
 type Model = {
   provider: string;
+  verified_at?: string;
   context_threshold?: number;
   regional?: boolean;
   source: string;
@@ -89,7 +90,13 @@ export function resolveRates(
   if (provider === "anthropic" && !["global", "us"].includes(geo)) return {};
   if (m === catalog.models["gpt-6-astra"] && tier === "fast" && geo === "eu")
     return {};
-  const verified = Date.parse(catalog.verified_at);
+  if (
+    provider === "openai" &&
+    tier === "ultrafast" &&
+    !["global", "us"].includes(geo)
+  )
+    return {};
+  const verified = Date.parse(m.verified_at || catalog.verified_at);
   const estimated =
     kind !== "delta" ||
     unavailableGeo ||

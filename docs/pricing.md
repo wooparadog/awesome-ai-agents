@@ -4,12 +4,17 @@ The collector calculates published API **token costs**, not subscription charges
 or provider invoices. Tool calls, hosted containers, storage, taxes, credits,
 private discounts, and subscription allowances are not included.
 
-`collector/pricing/catalog.json` is the reviewed pricing snapshot, verified on
-September 11, 2026. It covers OpenAI and Anthropic text models, including the newer
-GPT-5/Codex families, GPT-6 Astra, and current Claude models. Each model records its
-source. The sources are the [OpenAI pricing tables](https://developers.openai.com/api/docs/pricing),
-[Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing), linked
-OpenAI model pages, and the [LLM Prices feed](https://www.llm-prices.com/current-v1.json).
+`collector/pricing/catalog.json` is the pricing snapshot, refreshed on
+October 7, 2026. It includes GPT-6 Sol/Luna, GPT-6.1 Sol, Claude Opus/Sonnet 5.5,
+and the existing text-model catalog. The repeatable updater uses the
+[LLM Prices JSON feed](https://www.llm-prices.com/current-v1.json) by default
+(the snapshot used for this refresh is dated September 29). Input, output,
+and cached-input prices are cross-checked against the feed; cache writes,
+service tiers, and geographic rules come from the
+[OpenAI pricing tables](https://developers.openai.com/api/docs/pricing) and
+[Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+Each model records its source and verification date. Source URLs and SHA-256
+receipts live in `collector/pricing/sources.json`.
 The old `price_rates` SQL table is retained only for compatibility with older
 Worker versions and their SQL accounting queries. New ingestion and repricing use
 the catalog through `collector/src/pricing.ts`.
@@ -23,10 +28,10 @@ the catalog through `collector/src/pricing.ts`.
   272,000 input tokens, for the whole request. Exactly 272,000 uses the short rate.
   Claude Sonnet 4/4.5 uses its 200,000-token tier; Claude 4.6 and later uses standard
   rates across its supported context window.
-- Standard, Fast, Batch, and Flex prices are explicit per-model tables. Missing
+- Standard, Fast, Ultrafast, Batch, and Flex prices are explicit per-model tables. Missing
   combinations remain unpriced. In particular, Fast is not one universal
   multiplier, and Claude Priority capacity is not treated as OpenAI Fast mode.
-- Supported regional pricing applies the published 10% uplift. Unsupported
+- Supported regional pricing applies the published 10% uplift. Ultrafast is priced only for published models in global/US regions. Unsupported
   regions, partner billing, private tiers, and missing metric rates remain unpriced.
   A missing cache price never means a free cache operation.
 - Rate sets use integer pico-USD per token. This preserves fractional nano-USD
@@ -36,7 +41,7 @@ the catalog through `collector/src/pricing.ts`.
 
 `priced` says whether every nonzero token counter has a rate. `estimated` is a
 separate flag: it is true when billing metadata is incomplete, usage is cumulative,
-or a current price snapshot is being applied outside its verification window
+or a model price snapshot is being applied outside its verification window
 (before verification or more than 30 days afterward). Missing metadata assumes
 standard, global, direct API pricing and marks the result estimated. Unknown
 explicit metadata does not silently fall back to standard pricing. Claude's
@@ -91,24 +96,82 @@ them again. Frozen summaries whose individual requests have been deleted retain
 their previous amounts and remain estimates; their original context and billing
 tiers cannot be recovered from daily token totals.
 
-## Future price reviews
+## Repeatable updates
+
+Run from the repository root with Node.js 22.18+ (or the installed Node.js 26):
 
 ```sh
-node collector/scripts/check-prices.mjs
-# Or compare an already downloaded snapshot:
-node collector/scripts/check-prices.mjs /path/to/current-v1.json
-node collector/scripts/sync-legacy-pricing.mjs
+# Fetch the JSON feed and preview additions/changes; no catalog writes.
+pnpm -C collector prices:update
+
+# Apply the reviewed feed update locally.
+pnpm -C collector prices:update --write
+
+# Or use a previously downloaded JSON snapshot.
+pnpm -C collector prices:update --feed /path/to/current-v1.json --write
+
+# Save the downloaded feed alongside the update report for later inspection.
+pnpm -C collector prices:update --save-sources /tmp/price-review
+
+# Optional broader review: parse provider tables, including cache writes,
+# service tiers, and long-context rates absent from the JSON feed.
+pnpm -C collector prices:update --official
+pnpm -C collector prices:update --official --write
+# Offline provider review expects openai.md and anthropic.md in this directory.
+pnpm -C collector prices:update --official --source-dir /tmp/provider-prices --write
+
+# Independent feed audit and consistency checks.
+pnpm -C collector prices:check
+pnpm -C collector test:price-sync
 node collector/scripts/sync-legacy-pricing.mjs --check
+pnpm -C collector check
+pnpm -C collector test
 ```
 
-The audit is read-only and reports mismatches, missing models, and duplicate feed
-IDs. It compares feed input/output/cache-read prices, including context tiers.
-It cannot validate cache-write, service-tier, or regional rates absent from that
-feed; review those against the linked provider sources. Do not replace missing
-values with zero or erase verified models because the feed omits them.
+`prices:update` runs `collector/scripts/update-prices.mjs`. `--write` updates the
+catalog and source receipts, regenerates the legacy AwesomeWM table, and creates
+a numbered D1 migration **only when pricing behavior changes**. A repeated run
+against the same data is idempotent. The script does not deploy, contact D1, modify
+credentials, or schedule a background job.
 
-When rates change, update the catalog/version and add a migration that sets
-`pricing_version=''` for affected retained records. Current snapshots are not a
-historical price ledger; keep historical corrections explicitly marked estimated
-unless the effective rate is established. Regenerate the legacy table and run the
-collector pricing tests before deployment.
+The updater handles feed context suffixes such as `-272k` as thresholds, resolves
+reviewed model aliases, and rejects malformed, negative, zero, nonnumeric,
+conflicting-duplicate, or incomplete price rows. It imports only the supported
+OpenAI/Anthropic text pricing. Image/audio/embedding/tool billing needs different
+counters and is excluded. New feed-only models get standard rates; the script
+does not invent cache-write, Batch/Fast/Flex, or regional prices.
+
+Missing/null fields never erase known prices, and absent models remain available
+for historical data. Retained rates are reported in the preview. Models with
+unrefreshed fields keep their earlier evidence date; the script does not claim
+that the feed reverified all their pricing dimensions. Source feed dates are
+preserved rather than replaced with the download date. This means a stale feed
+continues to produce explicitly estimated costs after its verification window.
+
+`pricing/sync-rules.json` contains reviewed regional policies, aliases, and two
+precision overrides for rounded GPT-5.4 cache cells in provider tables. Each
+override records its expected published value, reason, and source; a changed
+cell fails closed for review. New OpenAI models default to global-only unless a
+reviewed regional policy is supplied. An optional provider-source refresh also
+rejects changed table layouts or context rules before writing anything. If a
+provider blocks automated downloads, use saved official Markdown with
+`--source-dir`; the default JSON-feed path does not depend on those pages.
+
+Inspect `git diff` after `--write`. Apply any existing schema prerequisites first.
+For the generated **pricing-only** migration, deploy the matching catalog before
+queueing repricing, so the hourly job cannot process the queue with old rates:
+
+```sh
+pnpm -C collector exec wrangler deploy --dry-run
+pnpm -C collector exec wrangler deploy
+pnpm -C collector exec wrangler d1 migrations apply ai-agents --remote
+node collector/scripts/reprice-usage.mjs --remote
+```
+
+The migration queues only retained evidence for affected exact model IDs,
+reviewed aliases, and dated snapshots; it excludes archived records and leaves
+frozen summaries unchanged. The repricer is restartable and updates usage
+contributions without counting tokens twice. A newly verified price applied to
+older evidence remains marked estimated: this catalog is not a historical price
+ledger. Prices omitted from the feed, private discounts, and unsupported billing
+modes still need a provider review rather than an inferred rate.

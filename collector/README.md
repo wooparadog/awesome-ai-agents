@@ -236,3 +236,15 @@ The reset is transactional. It preserves credentials, installations, live runs,
 and execution identities, advances a usage replay watermark, clears detailed
 records and totals, and publishes a new revision. Historical usage queued before
 that watermark is acknowledged without restoring deleted costs.
+
+
+## Refresh model prices
+
+`pnpm prices:update` previews changes from
+[llm-prices.com](https://www.llm-prices.com/current-v1.json). Use
+`pnpm prices:update --write` to update the local catalog, generate the legacy
+AwesomeWM prices, and create a migration for affected retained usage. No remote
+changes occur until you explicitly deploy/apply the migration. Optional
+`--official` supplements the feed with provider cache-write/service-tier tables.
+See [pricing maintenance](../docs/pricing.md#repeatable-updates) for validation,
+source snapshots, and the deployment/repricing order.

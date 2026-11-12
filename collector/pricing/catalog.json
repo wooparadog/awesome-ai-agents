@@ -1,6 +1,6 @@
 {
-  "version": "2026-09-11",
-  "verified_at": "2026-09-11T00:00:00Z",
+  "version": "2026-10-07",
+  "verified_at": "2026-10-07T00:00:00Z",
   "units": "USD per million tokens",
   "aliases": {
     "gpt-5.6": "gpt-5.6-sol",
@@ -8,22 +8,45 @@
     "claude-sonnet-4.5": "claude-sonnet-4-5",
     "claude-3.5-haiku": "claude-3-5-haiku",
     "claude-3.5-sonnet": "claude-3-5-sonnet",
-    "claude-3.7-sonnet": "claude-3-7-sonnet"
+    "claude-3.7-sonnet": "claude-3-7-sonnet",
+    "claude-sonnet-5.5": "claude-sonnet-5-5",
+    "claude-opus-5.5": "claude-opus-5-5"
   },
   "models": {
+    "babbage-002": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 0.4,
+            "output": 0.4
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 0.2,
+            "output": 0.2
+          }
+        }
+      },
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
     "chat-latest": {
       "provider": "openai",
       "source": "https://www.llm-prices.com/current-v1.json",
       "tiers": {
         "standard": {
           "short": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
-            "output": 30.0
+            "output": 30
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "chatgpt-4o-latest": {
       "provider": "openai",
@@ -36,7 +59,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "claude-3-5-haiku": {
       "provider": "anthropic",
@@ -45,9 +69,9 @@
         "standard": {
           "short": {
             "cache_write_1h": 1.6,
-            "cache_write_5m": 1.0,
+            "cache_write_5m": 1,
             "cache_read": 0.08,
-            "output": 4.0,
+            "output": 4,
             "input": 0.8
           }
         },
@@ -56,12 +80,13 @@
             "cache_write_1h": 0.8,
             "cache_write_5m": 0.5,
             "cache_read": 0.04,
-            "output": 2.0,
+            "output": 2,
             "input": 0.4
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-3-5-sonnet": {
       "provider": "anthropic",
@@ -69,16 +94,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
-            "output": 15.0,
-            "input": 3.0
+            "output": 15,
+            "input": 3
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 3.0,
+            "cache_write_1h": 3,
             "cache_write_5m": 1.875,
             "cache_read": 0.15,
             "output": 7.5,
@@ -86,7 +111,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-3-7-sonnet": {
       "provider": "anthropic",
@@ -94,16 +120,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
-            "output": 15.0,
-            "input": 3.0
+            "output": 15,
+            "input": 3
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 3.0,
+            "cache_write_1h": 3,
             "cache_write_5m": 1.875,
             "cache_read": 0.15,
             "output": 7.5,
@@ -111,7 +137,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-3-haiku": {
       "provider": "anthropic",
@@ -127,7 +154,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-3-opus": {
       "provider": "anthropic",
@@ -143,7 +171,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-fable-5": {
       "provider": "anthropic",
@@ -151,24 +180,25 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
-            "cache_read": 1.0,
-            "output": 50.0,
-            "input": 10.0
+            "cache_read": 1,
+            "output": 50,
+            "input": 10
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-fable-5-1": {
       "provider": "anthropic",
@@ -176,24 +206,25 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
             "cache_read": 0.25,
-            "output": 50.0,
-            "input": 10.0
+            "output": 50,
+            "input": 10
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.125,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-haiku-4-5": {
       "provider": "anthropic",
@@ -201,16 +232,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 2.0,
+            "cache_write_1h": 2,
             "cache_write_5m": 1.25,
             "cache_read": 0.1,
-            "output": 5.0,
-            "input": 1.0
+            "output": 5,
+            "input": 1
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 1.0,
+            "cache_write_1h": 1,
             "cache_write_5m": 0.625,
             "cache_read": 0.05,
             "output": 2.5,
@@ -218,7 +249,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-mythos-5": {
       "provider": "anthropic",
@@ -226,24 +258,25 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
-            "cache_read": 1.0,
-            "output": 50.0,
-            "input": 10.0
+            "cache_read": 1,
+            "output": 50,
+            "input": 10
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-mythos-5-1": {
       "provider": "anthropic",
@@ -251,24 +284,25 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
             "cache_read": 0.25,
-            "output": 50.0,
-            "input": 10.0
+            "output": 50,
+            "input": 10
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.125,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4": {
       "provider": "anthropic",
@@ -276,16 +310,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 30.0,
+            "cache_write_1h": 30,
             "cache_write_5m": 18.75,
             "cache_read": 1.5,
-            "output": 75.0,
-            "input": 15.0
+            "output": 75,
+            "input": 15
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 15.0,
+            "cache_write_1h": 15,
             "cache_write_5m": 9.375,
             "cache_read": 0.75,
             "output": 37.5,
@@ -293,7 +327,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4-1": {
       "provider": "anthropic",
@@ -301,16 +336,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 30.0,
+            "cache_write_1h": 30,
             "cache_write_5m": 18.75,
             "cache_read": 1.5,
-            "output": 75.0,
-            "input": 15.0
+            "output": 75,
+            "input": 15
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 15.0,
+            "cache_write_1h": 15,
             "cache_write_5m": 9.375,
             "cache_read": 0.75,
             "output": 37.5,
@@ -318,7 +353,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4-5": {
       "provider": "anthropic",
@@ -326,16 +362,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 5.0,
+            "cache_write_1h": 5,
             "cache_write_5m": 3.125,
             "cache_read": 0.25,
             "output": 12.5,
@@ -343,7 +379,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4-6": {
       "provider": "anthropic",
@@ -351,16 +388,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 5.0,
+            "cache_write_1h": 5,
             "cache_write_5m": 3.125,
             "cache_read": 0.25,
             "output": 12.5,
@@ -368,7 +405,8 @@
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4-7": {
       "provider": "anthropic",
@@ -376,16 +414,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 5.0,
+            "cache_write_1h": 5,
             "cache_write_5m": 3.125,
             "cache_read": 0.25,
             "output": 12.5,
@@ -393,7 +431,8 @@
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-4-8": {
       "provider": "anthropic",
@@ -401,16 +440,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 5.0,
+            "cache_write_1h": 5,
             "cache_write_5m": 3.125,
             "cache_read": 0.25,
             "output": 12.5,
@@ -419,15 +458,16 @@
         },
         "fast": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
-            "cache_read": 1.0,
-            "output": 50.0,
-            "input": 10.0
+            "cache_read": 1,
+            "output": 50,
+            "input": 10
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-opus-5": {
       "provider": "anthropic",
@@ -435,16 +475,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 10.0,
+            "cache_write_1h": 10,
             "cache_write_5m": 6.25,
             "cache_read": 0.5,
-            "output": 25.0,
-            "input": 5.0
+            "output": 25,
+            "input": 5
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 5.0,
+            "cache_write_1h": 5,
             "cache_write_5m": 3.125,
             "cache_read": 0.25,
             "output": 12.5,
@@ -453,15 +493,51 @@
         },
         "fast": {
           "short": {
-            "cache_write_1h": 20.0,
+            "cache_write_1h": 20,
             "cache_write_5m": 12.5,
-            "cache_read": 1.0,
-            "output": 50.0,
-            "input": 10.0
+            "cache_read": 1,
+            "output": 50,
+            "input": 10
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "claude-opus-5-5": {
+      "provider": "anthropic",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 4,
+            "cache_write_5m": 5,
+            "cache_write_1h": 8,
+            "cache_read": 0.2,
+            "output": 20
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 8,
+            "output": 40,
+            "cache_read": 0.4,
+            "cache_write_5m": 10,
+            "cache_write_1h": 16
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 2,
+            "output": 10,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5,
+            "cache_write_1h": 4
+          }
+        }
+      },
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-sonnet-4": {
       "provider": "anthropic",
@@ -469,39 +545,40 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
-            "output": 15.0,
-            "input": 3.0
+            "output": 15,
+            "input": 3
           },
           "long": {
-            "cache_write_1h": 12.0,
+            "cache_write_1h": 12,
             "cache_write_5m": 7.5,
             "cache_read": 0.6,
             "output": 22.5,
-            "input": 6.0
+            "input": 6
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 3.0,
+            "cache_write_1h": 3,
             "cache_write_5m": 1.875,
             "cache_read": 0.15,
             "output": 7.5,
             "input": 1.5
           },
           "long": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
             "output": 11.25,
-            "input": 3.0
+            "input": 3
           }
         }
       },
       "context_threshold": 200000,
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-sonnet-4-5": {
       "provider": "anthropic",
@@ -509,39 +586,40 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
-            "output": 15.0,
-            "input": 3.0
+            "output": 15,
+            "input": 3
           },
           "long": {
-            "cache_write_1h": 12.0,
+            "cache_write_1h": 12,
             "cache_write_5m": 7.5,
             "cache_read": 0.6,
             "output": 22.5,
-            "input": 6.0
+            "input": 6
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 3.0,
+            "cache_write_1h": 3,
             "cache_write_5m": 1.875,
             "cache_read": 0.15,
             "output": 7.5,
             "input": 1.5
           },
           "long": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
             "output": 11.25,
-            "input": 3.0
+            "input": 3
           }
         }
       },
       "context_threshold": 200000,
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "claude-sonnet-4-6": {
       "provider": "anthropic",
@@ -549,16 +627,16 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 6.0,
+            "cache_write_1h": 6,
             "cache_write_5m": 3.75,
             "cache_read": 0.3,
-            "output": 15.0,
-            "input": 3.0
+            "output": 15,
+            "input": 3
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 3.0,
+            "cache_write_1h": 3,
             "cache_write_5m": 1.875,
             "cache_read": 0.15,
             "output": 7.5,
@@ -566,7 +644,8 @@
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "claude-sonnet-5": {
       "provider": "anthropic",
@@ -574,24 +653,71 @@
       "tiers": {
         "standard": {
           "short": {
-            "cache_write_1h": 4.0,
+            "cache_write_1h": 4,
             "cache_write_5m": 2.5,
             "cache_read": 0.2,
-            "output": 10.0,
-            "input": 2.0
+            "output": 10,
+            "input": 2
           }
         },
         "batch": {
           "short": {
-            "cache_write_1h": 2.0,
+            "cache_write_1h": 2,
             "cache_write_5m": 1.25,
             "cache_read": 0.1,
-            "output": 5.0,
-            "input": 1.0
+            "output": 5,
+            "input": 1
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "claude-sonnet-5-5": {
+      "provider": "anthropic",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 2,
+            "cache_write_5m": 2.5,
+            "cache_write_1h": 4,
+            "cache_read": 0.2,
+            "output": 10
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 1,
+            "output": 5,
+            "cache_read": 0.1,
+            "cache_write_5m": 1.25,
+            "cache_write_1h": 2
+          }
+        }
+      },
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "davinci-002": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 2,
+            "output": 2
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 1,
+            "output": 1
+          }
+        }
+      },
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-3.5-turbo": {
       "provider": "openai",
@@ -604,7 +730,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-3.5-turbo-0125": {
       "provider": "openai",
@@ -623,7 +750,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-3.5-turbo-1106": {
       "provider": "openai",
@@ -631,18 +759,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 1.0,
-            "output": 2.0
+            "input": 1,
+            "output": 2
           }
         },
         "batch": {
           "short": {
-            "input": 1.0,
-            "output": 2.0
+            "input": 1,
+            "output": 2
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-3.5-turbo-instruct": {
       "provider": "openai",
@@ -651,11 +780,12 @@
         "standard": {
           "short": {
             "input": 1.5,
-            "output": 2.0
+            "output": 2
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4-0613": {
       "provider": "openai",
@@ -663,18 +793,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 30.0,
-            "output": 60.0
+            "input": 30,
+            "output": 60
           }
         },
         "batch": {
           "short": {
-            "input": 15.0,
-            "output": 30.0
+            "input": 15,
+            "output": 30
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4-turbo-2024-04-09": {
       "provider": "openai",
@@ -682,18 +813,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 10.0,
-            "output": 30.0
+            "input": 10,
+            "output": 30
           }
         },
         "batch": {
           "short": {
-            "input": 5.0,
-            "output": 15.0
+            "input": 5,
+            "output": 15
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4.1": {
       "provider": "openai",
@@ -701,26 +833,27 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.5,
-            "output": 8.0
+            "output": 8
           }
         },
         "batch": {
           "short": {
-            "input": 1.0,
-            "output": 4.0
+            "input": 1,
+            "output": 4
           }
         },
         "fast": {
           "short": {
             "input": 3.5,
             "cache_read": 0.875,
-            "output": 14.0
+            "output": 14
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4.1-mini": {
       "provider": "openai",
@@ -747,7 +880,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4.1-nano": {
       "provider": "openai",
@@ -774,7 +908,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4.5": {
       "provider": "openai",
@@ -788,7 +923,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "gpt-4o": {
       "provider": "openai",
@@ -798,24 +934,25 @@
           "short": {
             "input": 2.5,
             "cache_read": 1.25,
-            "output": 10.0
+            "output": 10
           }
         },
         "batch": {
           "short": {
             "input": 1.25,
-            "output": 5.0
+            "output": 5
           }
         },
         "fast": {
           "short": {
             "input": 4.25,
             "cache_read": 2.125,
-            "output": 17.0
+            "output": 17
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4o-2024-05-13": {
       "provider": "openai",
@@ -823,8 +960,8 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 5.0,
-            "output": 15.0
+            "input": 5,
+            "output": 15
           }
         },
         "batch": {
@@ -840,7 +977,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-4o-mini": {
       "provider": "openai",
@@ -863,11 +1001,12 @@
           "short": {
             "input": 0.25,
             "cache_read": 0.125,
-            "output": 1.0
+            "output": 1
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5": {
       "provider": "openai",
@@ -877,32 +1016,33 @@
           "short": {
             "input": 1.25,
             "cache_read": 0.125,
-            "output": 10.0
+            "output": 10
           }
         },
         "batch": {
           "short": {
             "input": 0.625,
             "cache_read": 0.0625,
-            "output": 5.0
+            "output": 5
           }
         },
         "flex": {
           "short": {
             "input": 0.625,
             "cache_read": 0.0625,
-            "output": 5.0
+            "output": 5
           }
         },
         "fast": {
           "short": {
             "input": 2.5,
             "cache_read": 0.25,
-            "output": 20.0
+            "output": 20
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5-codex": {
       "provider": "openai",
@@ -911,12 +1051,13 @@
         "standard": {
           "short": {
             "cache_read": 0.125,
-            "output": 10.0,
+            "output": 10,
             "input": 1.25
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "gpt-5-mini": {
       "provider": "openai",
@@ -926,21 +1067,21 @@
           "short": {
             "input": 0.25,
             "cache_read": 0.025,
-            "output": 2.0
+            "output": 2
           }
         },
         "batch": {
           "short": {
             "input": 0.125,
             "cache_read": 0.0125,
-            "output": 1.0
+            "output": 1
           }
         },
         "flex": {
           "short": {
             "input": 0.125,
             "cache_read": 0.0125,
-            "output": 1.0
+            "output": 1
           }
         },
         "fast": {
@@ -951,7 +1092,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5-nano": {
       "provider": "openai",
@@ -979,7 +1121,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5-pro": {
       "provider": "openai",
@@ -987,18 +1130,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 15.0,
-            "output": 120.0
+            "input": 15,
+            "output": 120
           }
         },
         "batch": {
           "short": {
             "input": 7.5,
-            "output": 60.0
+            "output": 60
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5-search-api": {
       "provider": "openai",
@@ -1008,11 +1152,12 @@
           "short": {
             "input": 1.25,
             "cache_read": 0.125,
-            "output": 10.0
+            "output": 10
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.1": {
       "provider": "openai",
@@ -1022,46 +1167,48 @@
           "short": {
             "input": 1.25,
             "cache_read": 0.125,
-            "output": 10.0
+            "output": 10
           }
         },
         "batch": {
           "short": {
             "input": 0.625,
             "cache_read": 0.0625,
-            "output": 5.0
+            "output": 5
           }
         },
         "flex": {
           "short": {
             "input": 0.625,
             "cache_read": 0.0625,
-            "output": 5.0
+            "output": 5
           }
         },
         "fast": {
           "short": {
             "input": 2.5,
             "cache_read": 0.25,
-            "output": 20.0
+            "output": 20
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.1-codex": {
       "provider": "openai",
-      "source": "https://developers.openai.com/api/docs/models/gpt-5.1-codex",
+      "source": "https://www.llm-prices.com/current-v1.json",
       "tiers": {
         "standard": {
           "short": {
             "input": 1.25,
             "cache_read": 0.125,
-            "output": 10.0
+            "output": 10
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "gpt-5.1-codex-max": {
       "provider": "openai",
@@ -1075,21 +1222,23 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "gpt-5.1-codex-mini": {
       "provider": "openai",
-      "source": "https://developers.openai.com/api/docs/models/gpt-5.1-codex-mini",
+      "source": "https://www.llm-prices.com/current-v1.json",
       "tiers": {
         "standard": {
           "short": {
             "input": 0.25,
             "cache_read": 0.025,
-            "output": 2.0
+            "output": 2
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "gpt-5.2": {
       "provider": "openai",
@@ -1099,32 +1248,33 @@
           "short": {
             "input": 1.75,
             "cache_read": 0.175,
-            "output": 14.0
+            "output": 14
           }
         },
         "batch": {
           "short": {
             "input": 0.875,
             "cache_read": 0.0875,
-            "output": 7.0
+            "output": 7
           }
         },
         "flex": {
           "short": {
             "input": 0.875,
             "cache_read": 0.0875,
-            "output": 7.0
+            "output": 7
           }
         },
         "fast": {
           "short": {
             "input": 3.5,
             "cache_read": 0.35,
-            "output": 28.0
+            "output": 28
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.2-codex": {
       "provider": "openai",
@@ -1138,7 +1288,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-11T00:00:00Z"
     },
     "gpt-5.2-pro": {
       "provider": "openai",
@@ -1146,28 +1297,29 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 21.0,
-            "output": 168.0
+            "input": 21,
+            "output": 168
           }
         },
         "batch": {
           "short": {
             "input": 10.5,
-            "output": 84.0
+            "output": 84
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.3-codex": {
       "provider": "openai",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://developers.openai.com/api/docs/pricing",
       "tiers": {
         "standard": {
           "short": {
             "input": 1.75,
             "cache_read": 0.175,
-            "output": 14.0
+            "output": 14
           }
         },
         "fast": {
@@ -1178,7 +1330,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.4": {
       "provider": "openai",
@@ -1188,10 +1341,10 @@
           "short": {
             "input": 2.5,
             "cache_read": 0.25,
-            "output": 15.0
+            "output": 15
           },
           "long": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
             "output": 22.5
           }
@@ -1222,14 +1375,15 @@
         },
         "fast": {
           "short": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
-            "output": 30.0
+            "output": 30
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.4-mini": {
       "provider": "openai",
@@ -1260,11 +1414,12 @@
           "short": {
             "input": 1.5,
             "cache_read": 0.15,
-            "output": 9.0
+            "output": 9
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.4-nano": {
       "provider": "openai",
@@ -1292,7 +1447,8 @@
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.4-pro": {
       "provider": "openai",
@@ -1300,37 +1456,38 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 30.0,
-            "output": 180.0
+            "input": 30,
+            "output": 180
           },
           "long": {
-            "input": 60.0,
-            "output": 270.0
+            "input": 60,
+            "output": 270
           }
         },
         "batch": {
           "short": {
-            "input": 15.0,
-            "output": 90.0
+            "input": 15,
+            "output": 90
           },
           "long": {
-            "input": 30.0,
-            "output": 135.0
+            "input": 30,
+            "output": 135
           }
         },
         "flex": {
           "short": {
-            "input": 15.0,
-            "output": 90.0
+            "input": 15,
+            "output": 90
           },
           "long": {
-            "input": 30.0,
-            "output": 135.0
+            "input": 30,
+            "output": 135
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.5": {
       "provider": "openai",
@@ -1338,24 +1495,24 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
-            "output": 30.0
+            "output": 30
           },
           "long": {
-            "input": 10.0,
-            "cache_read": 1.0,
-            "output": 45.0
+            "input": 10,
+            "cache_read": 1,
+            "output": 45
           }
         },
         "batch": {
           "short": {
             "input": 2.5,
             "cache_read": 0.25,
-            "output": 15.0
+            "output": 15
           },
           "long": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
             "output": 22.5
           }
@@ -1364,10 +1521,10 @@
           "short": {
             "input": 2.5,
             "cache_read": 0.25,
-            "output": 15.0
+            "output": 15
           },
           "long": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
             "output": 22.5
           }
@@ -1376,26 +1533,28 @@
           "short": {
             "input": 12.5,
             "cache_read": 1.25,
-            "output": 75.0
+            "output": 75
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.5-cyber": {
       "provider": "openai",
-      "source": "https://developers.openai.com/api/docs/pricing",
+      "source": "https://www.llm-prices.com/current-v1.json",
       "tiers": {
         "standard": {
           "short": {
             "input": 12.5,
             "cache_read": 1.25,
-            "output": 75.0
+            "output": 75
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.5-pro": {
       "provider": "openai",
@@ -1403,29 +1562,30 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 30.0,
-            "output": 180.0
+            "input": 30,
+            "output": 180
           },
           "long": {
-            "input": 60.0,
-            "output": 270.0
+            "input": 60,
+            "output": 270
           }
         },
         "batch": {
           "short": {
-            "input": 15.0,
-            "output": 90.0
+            "input": 15,
+            "output": 90
           }
         },
         "flex": {
           "short": {
-            "input": 15.0,
-            "output": 90.0
+            "input": 15,
+            "output": 90
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.6-cyber": {
       "provider": "openai",
@@ -1436,11 +1596,12 @@
             "input": 12.5,
             "cache_read": 1.25,
             "cache_write_5m": 15.625,
-            "output": 75.0
+            "output": 75
           }
         }
       },
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.6-luna": {
       "provider": "openai",
@@ -1498,13 +1659,14 @@
           "long": {
             "input": 0.8,
             "cache_read": 0.08,
-            "cache_write_5m": 1.0,
+            "cache_write_5m": 1,
             "output": 3.6
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.6-sol": {
       "provider": "openai",
@@ -1512,63 +1674,64 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 4.0,
+            "input": 4,
             "cache_read": 0.4,
-            "cache_write_5m": 5.0,
-            "output": 20.0
+            "cache_write_5m": 5,
+            "output": 20
           },
           "long": {
-            "input": 8.0,
+            "input": 8,
             "cache_read": 0.8,
-            "cache_write_5m": 10.0,
-            "output": 30.0
+            "cache_write_5m": 10,
+            "output": 30
           }
         },
         "batch": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.2,
             "cache_write_5m": 2.5,
-            "output": 10.0
+            "output": 10
           },
           "long": {
-            "input": 4.0,
+            "input": 4,
             "cache_read": 0.4,
-            "cache_write_5m": 5.0,
-            "output": 15.0
+            "cache_write_5m": 5,
+            "output": 15
           }
         },
         "flex": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.2,
             "cache_write_5m": 2.5,
-            "output": 10.0
+            "output": 10
           },
           "long": {
-            "input": 4.0,
+            "input": 4,
             "cache_read": 0.4,
-            "cache_write_5m": 5.0,
-            "output": 15.0
+            "cache_write_5m": 5,
+            "output": 15
           }
         },
         "fast": {
           "short": {
-            "input": 8.0,
+            "input": 8,
             "cache_read": 0.8,
-            "cache_write_5m": 10.0,
-            "output": 40.0
+            "cache_write_5m": 10,
+            "output": 40
           },
           "long": {
-            "input": 16.0,
+            "input": 16,
             "cache_read": 1.6,
-            "cache_write_5m": 20.0,
-            "output": 60.0
+            "cache_write_5m": 20,
+            "output": 60
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-5.6-terra": {
       "provider": "openai",
@@ -1576,63 +1739,64 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.2,
             "cache_write_5m": 2.5,
-            "output": 12.0
+            "output": 12
           },
           "long": {
-            "input": 4.0,
+            "input": 4,
             "cache_read": 0.4,
-            "cache_write_5m": 5.0,
-            "output": 18.0
+            "cache_write_5m": 5,
+            "output": 18
           }
         },
         "batch": {
           "short": {
-            "input": 1.0,
+            "input": 1,
             "cache_read": 0.1,
             "cache_write_5m": 1.25,
-            "output": 6.0
+            "output": 6
           },
           "long": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.2,
             "cache_write_5m": 2.5,
-            "output": 9.0
+            "output": 9
           }
         },
         "flex": {
           "short": {
-            "input": 1.0,
+            "input": 1,
             "cache_read": 0.1,
             "cache_write_5m": 1.25,
-            "output": 6.0
+            "output": 6
           },
           "long": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.2,
             "cache_write_5m": 2.5,
-            "output": 9.0
+            "output": 9
           }
         },
         "fast": {
           "short": {
-            "input": 4.0,
+            "input": 4,
             "cache_read": 0.4,
-            "cache_write_5m": 5.0,
-            "output": 24.0
+            "cache_write_5m": 5,
+            "output": 24
           },
           "long": {
-            "input": 8.0,
+            "input": 8,
             "cache_read": 0.8,
-            "cache_write_5m": 10.0,
-            "output": 36.0
+            "cache_write_5m": 10,
+            "output": 36
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "gpt-6-astra": {
       "provider": "openai",
@@ -1640,63 +1804,288 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 10.0,
-            "cache_read": 1.0,
+            "input": 10,
+            "cache_read": 1,
             "cache_write_5m": 12.5,
-            "output": 50.0
+            "output": 50
           },
           "long": {
-            "input": 20.0,
-            "cache_read": 2.0,
-            "cache_write_5m": 25.0,
-            "output": 75.0
+            "input": 20,
+            "cache_read": 2,
+            "cache_write_5m": 25,
+            "output": 75
           }
         },
         "batch": {
           "short": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
             "cache_write_5m": 6.25,
-            "output": 25.0
+            "output": 25
           },
           "long": {
-            "input": 10.0,
-            "cache_read": 1.0,
+            "input": 10,
+            "cache_read": 1,
             "cache_write_5m": 12.5,
             "output": 37.5
           }
         },
         "flex": {
           "short": {
-            "input": 5.0,
+            "input": 5,
             "cache_read": 0.5,
             "cache_write_5m": 6.25,
-            "output": 25.0
+            "output": 25
           },
           "long": {
-            "input": 10.0,
-            "cache_read": 1.0,
+            "input": 10,
+            "cache_read": 1,
             "cache_write_5m": 12.5,
             "output": 37.5
           }
         },
         "fast": {
           "short": {
-            "input": 20.0,
-            "cache_read": 2.0,
-            "cache_write_5m": 25.0,
-            "output": 100.0
+            "input": 20,
+            "cache_read": 2,
+            "cache_write_5m": 25,
+            "output": 100
           },
           "long": {
-            "input": 40.0,
-            "cache_read": 4.0,
-            "cache_write_5m": 50.0,
-            "output": 150.0
+            "input": 40,
+            "cache_read": 4,
+            "cache_write_5m": 50,
+            "output": 150
+          }
+        },
+        "ultrafast": {
+          "short": {
+            "input": 60,
+            "cache_read": 6,
+            "cache_write_5m": 75,
+            "output": 300
+          },
+          "long": {
+            "input": 120,
+            "cache_read": 12,
+            "cache_write_5m": 150,
+            "output": 450
           }
         }
       },
       "context_threshold": 272000,
-      "regional": true
+      "regional": true,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "gpt-6-luna": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 0.1,
+            "cache_read": 0.01,
+            "cache_write_5m": 0.125,
+            "output": 0.5
+          },
+          "long": {
+            "input": 0.2,
+            "cache_read": 0.02,
+            "cache_write_5m": 0.25,
+            "output": 0.75
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 0.05,
+            "cache_read": 0.005,
+            "cache_write_5m": 0.0625,
+            "output": 0.25
+          },
+          "long": {
+            "input": 0.1,
+            "cache_read": 0.01,
+            "cache_write_5m": 0.125,
+            "output": 0.375
+          }
+        },
+        "flex": {
+          "short": {
+            "input": 0.05,
+            "cache_read": 0.005,
+            "cache_write_5m": 0.0625,
+            "output": 0.25
+          },
+          "long": {
+            "input": 0.1,
+            "cache_read": 0.01,
+            "cache_write_5m": 0.125,
+            "output": 0.375
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 0.2,
+            "cache_read": 0.02,
+            "cache_write_5m": 0.25,
+            "output": 1
+          },
+          "long": {
+            "input": 0.4,
+            "cache_read": 0.04,
+            "cache_write_5m": 0.5,
+            "output": 1.5
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "gpt-6-sol": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 2,
+            "cache_read": 0.2,
+            "cache_write_5m": 2.5,
+            "output": 10
+          },
+          "long": {
+            "input": 4,
+            "cache_read": 0.4,
+            "cache_write_5m": 5,
+            "output": 15
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 1,
+            "cache_read": 0.1,
+            "cache_write_5m": 1.25,
+            "output": 5
+          },
+          "long": {
+            "input": 2,
+            "cache_read": 0.2,
+            "cache_write_5m": 2.5,
+            "output": 7.5
+          }
+        },
+        "flex": {
+          "short": {
+            "input": 1,
+            "cache_read": 0.1,
+            "cache_write_5m": 1.25,
+            "output": 5
+          },
+          "long": {
+            "input": 2,
+            "cache_read": 0.2,
+            "cache_write_5m": 2.5,
+            "output": 7.5
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 4,
+            "cache_read": 0.4,
+            "cache_write_5m": 5,
+            "output": 20
+          },
+          "long": {
+            "input": 8,
+            "cache_read": 0.8,
+            "cache_write_5m": 10,
+            "output": 30
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "gpt-6.1-sol": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 2,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5,
+            "output": 10
+          },
+          "long": {
+            "input": 4,
+            "cache_read": 0.2,
+            "cache_write_5m": 5,
+            "output": 15
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 1,
+            "cache_read": 0.05,
+            "cache_write_5m": 1.25,
+            "output": 5
+          },
+          "long": {
+            "input": 2,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5,
+            "output": 7.5
+          }
+        },
+        "flex": {
+          "short": {
+            "input": 1,
+            "cache_read": 0.05,
+            "cache_write_5m": 1.25,
+            "output": 5
+          },
+          "long": {
+            "input": 2,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5,
+            "output": 7.5
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 4,
+            "cache_read": 0.2,
+            "cache_write_5m": 5,
+            "output": 20
+          },
+          "long": {
+            "input": 8,
+            "cache_read": 0.4,
+            "cache_write_5m": 10,
+            "output": 30
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-10-07T00:00:00Z"
+    },
+    "gpt-rosalind-research": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 5,
+            "cache_read": 0.5,
+            "output": 25
+          }
+        }
+      },
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o1": {
       "provider": "openai",
@@ -1704,19 +2093,20 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 15.0,
+            "input": 15,
             "cache_read": 7.5,
-            "output": 60.0
+            "output": 60
           }
         },
         "batch": {
           "short": {
             "input": 7.5,
-            "output": 30.0
+            "output": 30
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o1-mini": {
       "provider": "openai",
@@ -1730,7 +2120,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "o1-preview": {
       "provider": "openai",
@@ -1744,7 +2135,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "o1-pro": {
       "provider": "openai",
@@ -1752,18 +2144,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 150.0,
-            "output": 600.0
+            "input": 150,
+            "output": 600
           }
         },
         "batch": {
           "short": {
-            "input": 75.0,
-            "output": 300.0
+            "input": 75,
+            "output": 300
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o3": {
       "provider": "openai",
@@ -1771,33 +2164,34 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.5,
-            "output": 8.0
+            "output": 8
           }
         },
         "batch": {
           "short": {
-            "input": 1.0,
-            "output": 4.0
+            "input": 1,
+            "output": 4
           }
         },
         "flex": {
           "short": {
-            "input": 1.0,
+            "input": 1,
             "cache_read": 0.25,
-            "output": 4.0
+            "output": 4
           }
         },
         "fast": {
           "short": {
             "input": 3.5,
             "cache_read": 0.875,
-            "output": 14.0
+            "output": 14
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o3-deep-research": {
       "provider": "openai",
@@ -1811,7 +2205,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "o3-mini": {
       "provider": "openai",
@@ -1831,7 +2226,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o3-pro": {
       "provider": "openai",
@@ -1839,18 +2235,19 @@
       "tiers": {
         "standard": {
           "short": {
-            "input": 20.0,
-            "output": 80.0
+            "input": 20,
+            "output": 80
           }
         },
         "batch": {
           "short": {
-            "input": 10.0,
-            "output": 40.0
+            "input": 10,
+            "output": 40
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o4-mini": {
       "provider": "openai",
@@ -1878,13 +2275,14 @@
         },
         "fast": {
           "short": {
-            "input": 2.0,
+            "input": 2,
             "cache_read": 0.5,
-            "output": 8.0
+            "output": 8
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-10-07T00:00:00Z"
     },
     "o4-mini-deep-research": {
       "provider": "openai",
@@ -1898,7 +2296,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     },
     "text-davinci-003": {
       "provider": "openai",
@@ -1911,7 +2310,8 @@
           }
         }
       },
-      "regional": false
+      "regional": false,
+      "verified_at": "2026-09-29T00:00:00.000Z"
     }
   }
 }

@@ -7,6 +7,8 @@ cd "$root"
   cd collector
   pnpm check
   pnpm test
+  pnpm test:price-sync
+  node scripts/sync-legacy-pricing.mjs --check
 )
 cargo fmt --manifest-path reporters/rust/Cargo.toml --check
 cargo clippy --locked --manifest-path reporters/rust/Cargo.toml --all-targets -- -D warnings

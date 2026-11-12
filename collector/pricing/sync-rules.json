@@ -1,0 +1,34 @@
+{
+  "description": "Reviewed policies not encoded in numeric pricing table cells. Unknown new OpenAI models default to global-only until reviewed.",
+  "models": {
+    "gpt-6-sol": { "regional": true },
+    "gpt-6-luna": { "regional": true },
+    "gpt-6.1-sol": { "regional": true }
+  },
+  "aliases": {
+    "claude-sonnet-5.5": "claude-sonnet-5-5",
+    "claude-opus-5.5": "claude-opus-5-5"
+  },
+  "rate_overrides": [
+    {
+      "model": "gpt-5.4",
+      "tier": "batch",
+      "context": "short",
+      "metric": "cache_read",
+      "published": 0.13,
+      "value": 0.125,
+      "reason": "The compact pricing table rounds this value; preserve the exact 50% Batch rate on standard cached input of $0.25.",
+      "source": "https://developers.openai.com/api/docs/guides/batch"
+    },
+    {
+      "model": "gpt-5.4",
+      "tier": "flex",
+      "context": "short",
+      "metric": "cache_read",
+      "published": 0.13,
+      "value": 0.125,
+      "reason": "Flex uses the exact Batch discount; the compact table rounds this value.",
+      "source": "https://developers.openai.com/api/docs/guides/flex-processing"
+    }
+  ]
+}

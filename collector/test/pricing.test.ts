@@ -15,7 +15,7 @@ declare const TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
 beforeAll(async () => {
   await applyD1Migrations(env.DB, TEST_MIGRATIONS);
 });
-const when = Date.parse("2026-09-11T12:00:00Z");
+const when = Date.parse(catalog.verified_at) + 12 * 3600000;
 const direct: PricingContext = {
   service_tier: "standard",
   billing_provider: "direct",
@@ -299,4 +299,130 @@ it("reprices retained contributions and resumed runs once, enriching metadata wi
   await expect(
     usage(env, who, { records: [{ ...row, pricing: direct }] }),
   ).rejects.toThrow("usage conflict");
+});
+
+it.each([
+  ["gpt-6.1-sol", 2, 0.1, 2.5, 10],
+  ["gpt-6-sol", 2, 0.2, 2.5, 10],
+  ["gpt-6-luna", 0.1, 0.01, 0.125, 0.5],
+])(
+  "prices refreshed %s across context and service tiers",
+  (model, input, read, write, output) => {
+    const short = total(model, {
+      input: 100,
+      cache_read: 100,
+      cache_write_5m: 100,
+      output: 100,
+    });
+    expect(short).toMatchObject({ priced: true, estimated: false });
+    expect(short.dollars).toBeCloseTo(
+      (100 * (input + read + write + output)) / 1e6,
+      12,
+    );
+    const long = total(model, { input: 1, cache_read: 272000, output: 10 });
+    expect(long.dollars).toBeCloseTo(
+      (2 * input + 272000 * read * 2 + 10 * output * 1.5) / 1e6,
+      12,
+    );
+    expect(
+      total(model, { input: 100 }, { ...direct, service_tier: "batch" })
+        .dollars,
+    ).toBeCloseTo((input * 50) / 1e6, 12);
+    expect(
+      total(model, { cache_read: 100 }, { ...direct, service_tier: "fast" })
+        .dollars,
+    ).toBeCloseTo((read * 200) / 1e6, 12);
+  },
+);
+it("prices Claude 5.5 cache discounts, aliases, batch and fast modes", () => {
+  expect(
+    total("claude-opus-5-5", {
+      input: 100,
+      cache_read: 100,
+      cache_write_5m: 100,
+      cache_write_1h: 100,
+      output: 100,
+    }).dollars,
+  ).toBeCloseTo(0.00372, 12);
+  expect(
+    total("claude-opus-5.5", { cache_read: 100 }, { ...direct, speed: "fast" })
+      .dollars,
+  ).toBeCloseTo(0.00004, 12);
+  expect(
+    total(
+      "claude-opus-5-5",
+      { cache_read: 100 },
+      { ...direct, service_tier: "batch" },
+    ).dollars,
+  ).toBeCloseTo(0.00001, 12);
+  expect(total("claude-sonnet-5-5", { input: 900000 }).dollars).toBeCloseTo(
+    1.8,
+    12,
+  );
+  expect(total("claude-sonnet-5.5", { input: 1000 }).dollars).toBeCloseTo(
+    0.002,
+    12,
+  );
+});
+it("supports published Astra ultrafast rates only in its documented regions", () => {
+  expect(
+    total(
+      "gpt-6-astra",
+      { input: 1000, output: 1000 },
+      { ...direct, service_tier: "ultrafast" },
+    ).dollars,
+  ).toBeCloseTo(0.36, 12);
+  expect(
+    total(
+      "gpt-6-astra",
+      { input: 1000 },
+      { ...direct, service_tier: "ultrafast", inference_geo: "us" },
+    ).dollars,
+  ).toBeCloseTo(0.066, 12);
+  expect(
+    total(
+      "gpt-6-astra",
+      { input: 1000 },
+      { ...direct, service_tier: "ultrafast", inference_geo: "eu" },
+    ).priced,
+  ).toBe(false);
+  expect(
+    total(
+      "gpt-6.1-sol",
+      { input: 1000 },
+      { ...direct, service_tier: "ultrafast" },
+    ).priced,
+  ).toBe(false);
+});
+it("does not refresh the verification date of unlisted legacy models", () => {
+  expect(
+    resolveRates(
+      "openai",
+      "gpt-5-codex",
+      "delta",
+      { input: 1 },
+      direct,
+      Date.parse("2026-10-20T00:00:00Z"),
+    )._estimated,
+  ).toBe(1);
+  expect(
+    resolveRates(
+      "openai",
+      "gpt-6.1-sol",
+      "delta",
+      { input: 1 },
+      direct,
+      Date.parse("2026-10-20T00:00:00Z"),
+    )._estimated,
+  ).toBe(0);
+  expect(
+    resolveRates(
+      "openai",
+      "gpt-6.1-sol",
+      "delta",
+      { input: 1 },
+      direct,
+      Date.parse("2026-09-29T00:00:00Z"),
+    )._estimated,
+  ).toBe(1);
 });

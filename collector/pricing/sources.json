@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-10-07T00:00:00Z",
+  "catalog_version": "2026-10-07",
+  "sources": {
+    "openai": {
+      "url": "https://developers.openai.com/api/docs/pricing.md",
+      "sha256": "0d9fb6b240209bb7b5a05d1d6ce0b8a796e0924b7e34c5ab183a3f1f890febe6"
+    },
+    "anthropic": {
+      "url": "https://platform.claude.com/docs/en/about-claude/pricing.md",
+      "sha256": "f7a75fddc0f2a9445366cc2d7ec7eb5fc327a5977ec1288a2538991a4b7b24b6"
+    },
+    "feed": {
+      "url": "https://www.llm-prices.com/current-v1.json",
+      "sha256": "2efcc88a4a2a17113a43e2ed581ca67214847d59273141f08560afb31cba438c",
+      "updated_at": "2026-09-29"
+    }
+  },
+  "rules_sha256": "ce02ac8325bf886704d40d5a56f21a543abf7ad486bc54826658ec85c944649f"
+}

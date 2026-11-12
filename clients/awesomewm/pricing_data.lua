@@ -1,7 +1,8 @@
--- Generated from collector/pricing/catalog.json (2026-09-11).
+-- Generated from collector/pricing/catalog.json (2026-10-07).
 -- Legacy daily aggregates cannot recover per-request context or billing tiers.
 -- stylua: ignore
 return { models = {
+  ["babbage-002"] = { input = 0.4, output = 0.4 },
   ["chat-latest"] = { input = 5, cache_read = 0.5, output = 30 },
   ["chatgpt-4o-latest"] = { input = 5, output = 15 },
   ["claude-3-5-haiku"] = { cache_write_1h = 1.6, cache_write_5m = 1, cache_read = 0.08, output = 4, input = 0.8 },
@@ -21,10 +22,13 @@ return { models = {
   ["claude-opus-4-7"] = { cache_write_1h = 10, cache_write_5m = 6.25, cache_read = 0.5, output = 25, input = 5 },
   ["claude-opus-4-8"] = { cache_write_1h = 10, cache_write_5m = 6.25, cache_read = 0.5, output = 25, input = 5 },
   ["claude-opus-5"] = { cache_write_1h = 10, cache_write_5m = 6.25, cache_read = 0.5, output = 25, input = 5 },
+  ["claude-opus-5-5"] = { input = 4, cache_write_5m = 5, cache_write_1h = 8, cache_read = 0.2, output = 20 },
   ["claude-sonnet-4"] = { cache_write_1h = 6, cache_write_5m = 3.75, cache_read = 0.3, output = 15, input = 3 },
   ["claude-sonnet-4-5"] = { cache_write_1h = 6, cache_write_5m = 3.75, cache_read = 0.3, output = 15, input = 3 },
   ["claude-sonnet-4-6"] = { cache_write_1h = 6, cache_write_5m = 3.75, cache_read = 0.3, output = 15, input = 3 },
   ["claude-sonnet-5"] = { cache_write_1h = 4, cache_write_5m = 2.5, cache_read = 0.2, output = 10, input = 2 },
+  ["claude-sonnet-5-5"] = { input = 2, cache_write_5m = 2.5, cache_write_1h = 4, cache_read = 0.2, output = 10 },
+  ["davinci-002"] = { input = 2, output = 2 },
   ["gpt-3.5-turbo"] = { input = 0.5, output = 1.5 },
   ["gpt-3.5-turbo-0125"] = { input = 0.5, output = 1.5 },
   ["gpt-3.5-turbo-1106"] = { input = 1, output = 2 },
@@ -64,6 +68,10 @@ return { models = {
   ["gpt-5.6-sol"] = { input = 4, cache_read = 0.4, cache_write_5m = 5, output = 20 },
   ["gpt-5.6-terra"] = { input = 2, cache_read = 0.2, cache_write_5m = 2.5, output = 12 },
   ["gpt-6-astra"] = { input = 10, cache_read = 1, cache_write_5m = 12.5, output = 50 },
+  ["gpt-6-luna"] = { input = 0.1, cache_read = 0.01, cache_write_5m = 0.125, output = 0.5 },
+  ["gpt-6-sol"] = { input = 2, cache_read = 0.2, cache_write_5m = 2.5, output = 10 },
+  ["gpt-6.1-sol"] = { input = 2, cache_read = 0.1, cache_write_5m = 2.5, output = 10 },
+  ["gpt-rosalind-research"] = { input = 5, cache_read = 0.5, output = 25 },
   ["o1"] = { input = 15, cache_read = 7.5, output = 60 },
   ["o1-mini"] = { input = 1.1, cache_read = 0.55, output = 4.4 },
   ["o1-preview"] = { input = 15, cache_read = 7.5, output = 60 },
@@ -82,4 +90,6 @@ return { models = {
   ["claude-3.5-haiku"] = "claude-3-5-haiku",
   ["claude-3.5-sonnet"] = "claude-3-5-sonnet",
   ["claude-3.7-sonnet"] = "claude-3-7-sonnet",
+  ["claude-sonnet-5.5"] = "claude-sonnet-5-5",
+  ["claude-opus-5.5"] = "claude-opus-5-5",
 } }

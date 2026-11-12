@@ -8,7 +8,10 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "migrate:local": "wrangler d1 migrations apply DB --local",
-    "provision": "node scripts/provision.mjs"
+    "provision": "node scripts/provision.mjs",
+    "prices:check": "node scripts/check-prices.mjs",
+    "prices:update": "node scripts/update-prices.mjs",
+    "test:price-sync": "node --test scripts/tests/price-sync.test.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.1.5",

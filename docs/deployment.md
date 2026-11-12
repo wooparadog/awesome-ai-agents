@@ -374,3 +374,62 @@ collector validation passed 53 tests. No reporter binary change was required.
 One closed Claude session on ArchDell has a missing local transcript; it continues
 to mark usage coverage incomplete. Reporter uploads themselves had no errors or
 quarantined records after the rollout.
+
+
+## October model pricing refresh (2026-10-07)
+
+Deployed Worker version `35a4f0e0-c38f-4a61-8260-45e7110a8af3` with catalog
+`2026-10-07`. Added GPT-6 Sol, GPT-6 Luna, GPT-6.1 Sol, Claude Opus 5.5, Claude
+Sonnet 5.5, GPT-Rosalind Research, and the previously missing Davinci/Babbage 002
+entries. Added published GPT-6 Astra Ultrafast prices and restricted that tier to
+global/US processing. The catalog now contains 81 canonical model entries.
+
+The repeatable `pnpm -C collector prices:update` command uses
+`https://www.llm-prices.com/current-v1.json` by default. The retrieved feed was
+updated September 29, 2026; its 218 comparable prices matched with no missing
+supported models. Provider pricing tables supplied cache-write, service-tier,
+and other rules absent from the feed. The updater preserves absent models/rates,
+records source hashes and evidence dates, previews changes by default, and writes
+local artifacts only with `--write`. Repeating the sync produced no rate changes
+or duplicate migration. The AwesomeWM legacy table was regenerated from the
+same catalog; collector-mode viewers use the deployed prices directly.
+
+Applied generated migration `0016_prices_20261007.sql` after deploying the matching
+catalog, then drained the indexed repricing queue: 1,648 retained records updated.
+Archived summaries were unchanged. Verified the queue was empty and the live
+snapshot reported priced Claude Opus 5.5 usage. No reporter binary upgrade or
+credential change was needed.
+
+The first queue migration hit D1's stricter GLOB pattern complexity limit and
+failed atomically. The generator now compares model prefixes and lengths separately
+and uses short numeric predicates; this is regression-tested. The corrected
+predicate was verified with a read-only remote query before applying the migration.
+
+Validation passed: 59 collector runtime tests, eight updater/parser/migration tests,
+TypeScript checks, source-feed audit, legacy Lua pricing test, generated-table
+consistency, formatting, and Worker packaging.
+
+
+## Rain reporter reinstall (2026-10-15)
+
+Rain was reachable with an active older reporter and valid write credential, but
+`~/.codex/hooks.json` was absent. Rebuilt the current Rust release and installed
+it with `--agent codex --service`, restoring the five Codex hooks while preserving
+Claude settings (verified by checksum), reporter identity, collector URL, and
+credentials. Enabled user lingering for boot startup and operation after logout.
+
+The deployed binary SHA-256 is
+`468281e41d1304e6fbb8ec19003c6616cf8d9547f09f2d08f3d97422d4864b85`.
+The previous binary is `~/.local/bin/ai-agents.before-install-20261015`.
+Verified the systemd unit, matching binary checksum, and an end-only hook using
+the registered hook command: delivery completed in 1.24 seconds with empty
+inbox/outbox and quarantine. Codex may require trusting the restored hooks.
+
+
+Rain's Claude Code hooks were also installed on October 15 using `--agent claude`.
+Registered SessionStart, UserPromptSubmit, PermissionRequest, Notification, Stop,
+and SessionEnd in `~/.claude/settings.json`. Existing non-hook Claude settings
+and the Codex hook file were preserved; Claude's backup is
+`~/.claude/settings.json.bak.20261015161310`. Both agents use the same running
+reporter service and installation credential. Direct end-only hook delivery was
+verified with no queued or quarantined records afterward.

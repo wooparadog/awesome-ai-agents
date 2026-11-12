@@ -78,4 +78,4 @@ console.log(
     2,
   ),
 );
-if (mismatches.length) process.exitCode = 1;
+if (mismatches.length || missing.length) process.exitCode = 1;
