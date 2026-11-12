@@ -59,3 +59,10 @@ For web-panel changes, also install and run the browser tests described in
 [`clients/web/README.md`](clients/web/README.md#develop-and-test). They start an
 isolated local Worker and produce desktop/mobile screenshots. Collector tests
 cover browser login, delegation, expiry, single-use races, and revocation.
+
+## Releases
+
+Bump `version` in `reporters/rust/Cargo.toml`, commit, then push a matching tag
+(`git tag -a v0.2.0 -m v0.2.0 && git push origin v0.2.0`). The
+[release workflow](.github/workflows/release.yml) builds Linux (musl) and macOS
+reporter binaries and attaches them, with checksums, to the GitHub release.

@@ -11,12 +11,26 @@ only by the installer; systemd is an optional supervisor.
 For the complete Linux setup, see the [systemd installation guide](../../docs/linux-systemd.md),
 including headless-server boot, proxy settings, custom paths, and manual unit installation.
 
-Build with Rust 1.89 or newer:
+Download a prebuilt static binary from the
+[releases page](https://github.com/wooparadog/awesome-ai-agents/releases) and pass it
+to the installer, using `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`:
+
+```sh
+v=v0.1.0 target=x86_64-unknown-linux-musl
+curl -fsSLO https://github.com/wooparadog/awesome-ai-agents/releases/download/$v/ai-agents-$v-$target.tar.gz
+tar xzf ai-agents-$v-$target.tar.gz
+python3 reporters/rust/install.py --service --binary ai-agents-$v-$target/ai-agents
+```
+
+Or build with Rust 1.89 or newer:
 
 ```sh
 cargo build --release --locked --manifest-path reporters/rust/Cargo.toml
 python3 reporters/rust/install.py --service
 ```
+
+Releases also include macOS builds. They compile but are not supported: process
+discovery reads Linux `/proc`.
 
 Existing installations reuse their collector configuration and credentials. For a
 new machine, [provision a write credential](../../collector/README.md), then run:
