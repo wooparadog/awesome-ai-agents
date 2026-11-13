@@ -24,6 +24,25 @@ The tests assert that adding detailed history does not increase the statistics
 read count, and that the snapshot data batch stays below 50 reads. These are local
 runtime measurements; production logs expose the same counters for verification.
 
+## Write budget
+
+D1's free tier allows 100,000 rows written per day, and every index entry
+counts as a written row. Production query insights on November 13 showed
+usage observations, usage inserts, and the hourly archive step as the largest
+writers. Migration `0018_write_budget.sql` drops six indexes that no query or
+trigger needed, and adds a partial `cumulative_stream` index so trigger lookups
+of later cumulative samples stay bounded without charging delta records.
+
+| Measurement (workerd D1) | Before | After |
+| --- | ---: | ---: |
+| Rows written, 64-record usage batch | 1,174 | 854 |
+| Rows written, 16-event batch | 275 | 244 |
+| Rows read, 40th 16-record batch in one stream | 294 | 294 |
+
+The hourly pricing probe and repricing queue pin the partial `pricing_pending`
+index; without it they read every retained record. Regression tests assert the
+long-stream ingest cost and both pricing query read counts.
+
 ## Write path and correctness
 
 `usage_records` keeps short-lived deduplication and cumulative evidence.

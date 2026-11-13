@@ -4,7 +4,8 @@ import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, expect, it, vi } from "vitest";
 import { ingest, usage } from "../src/ingest";
 import { dayBounds, snapshot, statisticsQueries } from "../src/snapshot";
-import { retain } from "../src/retention";
+import { pendingPricingProbe, retain } from "../src/retention";
+import { pendingPrices } from "../src/reprice";
 import { catalog, resolveRates } from "../src/pricing";
 import type { Identity } from "../src/auth";
 declare const TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -254,6 +255,12 @@ it("bounds statistic reads independently of detailed history size", async () => 
   });
   await retain({ ...env, DB: measuredDb }, now);
   expect(cleanupReads).toBeLessThan(50);
+  // The hourly pricing probe and repricing queue must use the partial
+  // pricing_pending index, not read every retained record.
+  const probe = await env.DB.prepare(pendingPricingProbe).all();
+  const queue = await env.DB.prepare(pendingPrices).all();
+  expect(queue.results).toHaveLength(0);
+  expect(probe.meta.rows_read + queue.meta.rows_read).toBeLessThan(5);
   const afterCleanup = await env.DB.prepare(
     "SELECT last_run FROM maintenance_runs WHERE id='compact'",
   ).first();
@@ -264,3 +271,36 @@ it("bounds statistic reads independently of detailed history size", async () => 
     ).first(),
   ).toEqual(afterCleanup);
 }, 30000);
+
+it("keeps ingest cost flat as one usage stream grows", async () => {
+  const { workspace, who } = await setup();
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  const start = Date.now() - 3600000;
+  for (let batch = 0; batch < 40; batch++)
+    await usage(env, who, {
+      records: Array.from({ length: 16 }, (_, i) =>
+        record(
+          workspace,
+          `${workspace}-long-${batch}-${i}`,
+          start + batch * 16 + i,
+        ),
+      ),
+    });
+  const costs = logs.mock.calls
+    .map(([text]) => JSON.parse(String(text)))
+    .filter((entry) => entry.event === "usage_write_cost");
+  logs.mockRestore();
+  expect(costs).toHaveLength(40);
+  const [first, last] = [costs[0], costs[39]];
+  // Trigger lookups of later samples in the stream must stay index-bounded;
+  // a scan of the stream makes each batch read every earlier record.
+  expect(last.rows_read).toBeLessThan(first.rows_read * 2);
+  // D1 meters each index entry as a written row.
+  expect({ rows_read: last.rows_read, rows_written: last.rows_written })
+    .toMatchInlineSnapshot(`
+      {
+        "rows_read": 294,
+        "rows_written": 214,
+      }
+    `);
+});

@@ -10,8 +10,9 @@ export type PriceRecord = Counters & {
   occurred_at: number;
   pricing_json: string;
 };
+// Requires pricing_pending; see pendingPricingProbe in retention.ts.
 export const pendingPrices = `SELECT workspace_id,id,provider,model,measurement_kind,occurred_at,
-  input,output,cache_read,cache_write_5m,cache_write_1h,pricing_json FROM usage_records
+  input,output,cache_read,cache_write_5m,cache_write_1h,pricing_json FROM usage_records INDEXED BY pricing_pending
   WHERE archived=0 AND pricing_version='' ORDER BY workspace_id,id LIMIT 200`;
 export function recordRates(row: PriceRecord) {
   return JSON.stringify(
