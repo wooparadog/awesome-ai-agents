@@ -7,7 +7,7 @@ All application endpoints require authentication; opening the URL without a toke
 | Resource | Value |
 | --- | --- |
 | Worker | `ai-agents-collector` |
-| Deployed version | `39d15271-d036-42e4-a880-52dd198f0b71` |
+| Deployed version | `3357669e-6a30-4521-bde8-3ec8b2df3065` (2026-11-13) |
 | Initial deployment | 2026-09-09, 05:22 UTC |
 | D1 database | `ai-agents` |
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
@@ -61,6 +61,18 @@ Reporter queues retain pending records during outages. To monitor ongoing cost, 
 benchmark measured four reads for statistics and ten for the full snapshot data
 batch. See [statistics design](statistics.md) for the seven-day detailed-data and
 30-day summary retention policy.
+
+## November 13 write-budget rollout
+
+Rows written had reached 41.6k of the free tier's 100k daily quota, with rows read
+at 263.81k of 5M. Query insights for the previous day attributed the largest
+shares to usage observation inserts (16.7k), the hourly archive update (10.9k),
+usage record inserts (9.6k), and event inserts (6.7k). The Worker was deployed as
+version `3357669e-6a30-4521-bde8-3ec8b2df3065`, carrying the 2026-11-12 pricing
+catalog, and then `0017_prices_20261112.sql` and `0018_write_budget.sql` were
+applied. Production `EXPLAIN QUERY PLAN` confirmed the cumulative-sample lookup
+uses `cumulative_stream`, and an authenticated snapshot returned HTTP 200.
+See [write budget](statistics.md#write-budget).
 
 ## Credentials and connecting clients
 
