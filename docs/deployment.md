@@ -7,7 +7,7 @@ All application endpoints require authentication; opening the URL without a toke
 | Resource | Value |
 | --- | --- |
 | Worker | `ai-agents-collector` |
-| Deployed version | `3357669e-6a30-4521-bde8-3ec8b2df3065` (2026-11-13) |
+| Deployed version | `a1fe83c3-d8be-4235-bb81-25db91183f3f` (2026-11-18) |
 | Initial deployment | 2026-09-09, 05:22 UTC |
 | D1 database | `ai-agents` |
 | D1 ID | `5104c85f-ece5-4bad-b122-6145081fd0b7` |
@@ -73,6 +73,13 @@ catalog, and then `0017_prices_20261112.sql` and `0018_write_budget.sql` were
 applied. Production `EXPLAIN QUERY PLAN` confirmed the cumulative-sample lookup
 uses `cumulative_stream`, and an authenticated snapshot returned HTTP 200.
 See [write budget](statistics.md#write-budget).
+
+## November 18 pricing refresh
+
+Version `a1fe83c3-d8be-4235-bb81-25db91183f3f` carries the 2026-11-18 catalog,
+reviewed against both provider pages. `0019_prices_20261118.sql` was applied
+after the deployment and queued 77 retained records of changed models; the
+hourly job reprices them. See [token pricing](pricing.md).
 
 ## Credentials and connecting clients
 
