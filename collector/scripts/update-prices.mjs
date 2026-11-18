@@ -111,6 +111,16 @@ const feed = values.official
       ...previous,
       aliases: { ...previous.aliases, ...rules.aliases },
     });
+// Reviewed feed errors (see check-prices.mjs) keep the provider's published
+// rate, but only while the feed still shows the exact value that was reviewed.
+for (const e of feed ? rules.feed_exceptions || [] : []) {
+  const raw = e.feed_id.split("/")[1],
+    tier = /-(\d+)k$/.exec(raw),
+    base = tier ? raw.slice(0, -tier[0].length) : raw;
+  const id = rules.aliases[base] || previous.aliases[base] || base;
+  const rates = feed.models[id]?.tiers.standard?.[tier ? "long" : "short"];
+  if (rates?.[e.metric] === e.feed) rates[e.metric] = e.catalog;
+}
 const parsed = feed?.models || {
   ...parseOpenAI(sources.openai.text),
   ...parseAnthropic(sources.anthropic.text),

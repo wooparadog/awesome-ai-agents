@@ -302,3 +302,97 @@ test("generated migration only queues matching retained evidence, including snap
     db.close();
   }
 });
+test("maps reordered OpenAI columns by name, including split context rows", () => {
+  const grouped =
+    "| Model | Short context input | Short context output | Short context cached input | Short context 30m write | Short context 12h write | Long context input | Long context output | Long context cached input | Long context 30m write | Long context 12h write |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |";
+  const page = [
+    "Flagship models",
+    ...["Standard", "Batch", "Flex", "Fast"].flatMap((t) => [
+      t,
+      `### ${t} pricing data`,
+      grouped,
+      "| gpt-new | $2.00 | $10.00 | $0.10 | $2.50 | $5.00 | $4.00 | $15.00 | $0.20 | $5.00 | $10.00 |",
+      "",
+      "| Model | Input | Output | Cached input |\n| --- | --- | --- | --- |",
+      "| gpt-small | $0.20 | $1.25 | $0.02 |",
+    ]),
+    "Ultrafast",
+    "### Ultrafast promotion pricing data",
+    grouped,
+    "| gpt-new | $6.00 | $30.00 | $0.30 | $7.50 | $15.00 | $12.00 | $45.00 | $0.60 | $15.00 | $30.00 |",
+    "### Ultrafast list pricing data",
+    grouped,
+    "| gpt-new | $12.00 | $60.00 | $0.60 | $15.00 | $30.00 | $24.00 | $90.00 | $1.20 | $30.00 | $60.00 |",
+    "Short context: ≤272K input tokens. Long context: >272K input tokens.",
+    "Specialized models",
+    "Standard",
+    "| Category | Model | Input | Output | Cached input | 30m write | 12h write |\n| --- | --- | --- | --- | --- | --- | --- |",
+    "| Cyber | gpt-cyber (short context) | $20.00 | $100.00 | $2.00 | $25.00 | $50.00 |",
+    "| Cyber | gpt-cyber (long context) | $40.00 | $150.00 | $4.00 | - | - |",
+    "| Cyber | gpt-short-only (short context) | $5.00 | $25.00 | $0.50 | - | - |",
+    "| Cyber | gpt-short-only (long context) | - | - | - | - | - |",
+    "| Moderation | omni-moderation-latest | Free | - | - | - | - |",
+    "Fine-tuning",
+    "Standard",
+    "| Model | Training | Input | Output | Cached input |\n| --- | --- | --- | --- | --- |",
+    "| gpt-tuned | $25.00 | $3.00 | $12.00 | $0.30 |",
+  ].join("\n");
+  const m = parseOpenAI(page);
+  // The 30-minute write is the default cache write; 12-hour writes are unmapped.
+  assert.deepEqual(m["gpt-new"].tiers.standard, {
+    short: { input: 2, output: 10, cache_read: 0.1, cache_write_5m: 2.5 },
+    long: { input: 4, output: 15, cache_read: 0.2, cache_write_5m: 5 },
+  });
+  assert.equal(m["gpt-new"].context_threshold, 272000);
+  // The current promotion applies; the later list price is not yet in force.
+  assert.equal(m["gpt-new"].tiers.ultrafast.short.input, 6);
+  assert.deepEqual(m["gpt-small"].tiers.batch, {
+    short: { input: 0.2, output: 1.25, cache_read: 0.02 },
+  });
+  assert.deepEqual(m["gpt-cyber"].tiers.standard.long, {
+    input: 40,
+    output: 150,
+    cache_read: 4,
+  });
+  assert.equal(m["gpt-short-only"].tiers.standard.long, undefined);
+  assert.equal(m["gpt-short-only"].context_threshold, undefined);
+  assert.equal(m["omni-moderation-latest"], undefined);
+  assert.equal(m["gpt-tuned"], undefined);
+  assert.throws(
+    () =>
+      parseOpenAI(
+        page.replace("Short context 30m write", "Short context 1d write"),
+      ),
+    /headers/,
+  );
+});
+test("parses Claude prompt-length tiers and USD price cells", () => {
+  const page = anthropic
+    .replace(
+      "| Claude Sonnet 5.5 |",
+      "| Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 / MTok | $0.50 / MTok |\n| Claude Haiku 5.5 (for prompts over 100,000 tokens) | $0.50 / MTok | $0.625 / MTok | $1 / MTok | $0.05 / MTok | $2.50 / MTok |\n| Claude Sonnet 5.5 |",
+    )
+    .replace(
+      "| Claude Opus 5.5 | $8 / MTok | $40 / MTok |",
+      "| Claude Opus 5.5 | $8 USD / MTok | $40 USD / MTok |",
+    )
+    .replace(
+      "| Claude Opus 5.5 | $2 / MTok | $10 / MTok |",
+      "| Claude Opus 5.5 | $2 / MTok | $10 / MTok |\n| Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.05 / MTok | $0.25 / MTok |\n| Claude Haiku 5.5 (for prompts over 100,000 tokens) | $0.25 / MTok | $1.25 / MTok |",
+    );
+  const m = parseAnthropic(page);
+  const haiku = m["claude-haiku-5-5"];
+  assert.equal(haiku.context_threshold, 100000);
+  assert.equal(haiku.regional, true);
+  assert.deepEqual(haiku.tiers.standard.long, {
+    input: 0.5,
+    cache_write_5m: 0.625,
+    cache_write_1h: 1,
+    cache_read: 0.05,
+    output: 2.5,
+  });
+  assert.equal(haiku.tiers.batch.short.input, 0.05);
+  assert.equal(haiku.tiers.batch.long.cache_read, 0.025);
+  assert.equal(m["claude-opus-5-5"].tiers.fast.short.input, 8);
+  assert.equal(m["claude-sonnet-5-5"].context_threshold, undefined);
+});

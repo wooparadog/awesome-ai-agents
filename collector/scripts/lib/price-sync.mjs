@@ -41,7 +41,9 @@ function table(lines, index) {
 function rate(cell) {
   const clean = cell.replace(/<sup>.*?<\/sup>/g, "").trim();
   if (clean === "-" || clean === "—") return undefined;
-  const match = /^\$([0-9]+(?:\.[0-9]+)?)(?:\s*\/\s*MTok)?$/.exec(clean);
+  const match = /^\$([0-9]+(?:\.[0-9]+)?)(?:\s*USD)?(?:\s*\/\s*MTok)?$/.exec(
+    clean,
+  );
   assert(match, `Unrecognized price cell: ${cell}`);
   const value = Number(match[1]);
   assert(
@@ -67,11 +69,47 @@ function put(models, id, provider, tier, short, long) {
     );
   model.tiers[tier] = value;
 }
+// Columns are mapped by header name so reordered tables parse correctly; any
+// unrecognized header fails instead of being misread. OpenAI's 30-minute cache
+// write is the default retention and is billed as cache_write_5m. Codex usage
+// does not distinguish 12-hour retention writes, so that column is reviewed
+// but not mapped.
+const OPENAI_COLUMNS = {
+  input: "input",
+  output: "output",
+  "cached input": "cache_read",
+  "cache writes": "cache_write_5m",
+  "30m write": "cache_write_5m",
+  "12h write": null,
+};
+function openAIColumns(headers) {
+  const map = [];
+  let model = -1,
+    category = -1;
+  headers.forEach((header, i) => {
+    if (header === "Model") return void (model = i);
+    if (header === "Category") return void (category = i);
+    const match = /^(?:(Short|Long) context )?(.+)$/.exec(header);
+    const metric = OPENAI_COLUMNS[match[2].toLowerCase()];
+    assert(metric !== undefined, `Unexpected OpenAI headers: ${header}`);
+    if (metric) map.push([i, (match[1] || "Short").toLowerCase(), metric]);
+  });
+  assert(model >= 0, "Unexpected OpenAI headers: missing Model");
+  for (const required of ["input", "output"])
+    assert(
+      map.some(
+        ([, context, metric]) => context === "short" && metric === required,
+      ),
+      `Unexpected OpenAI headers: missing ${required}`,
+    );
+  return { map, model, category };
+}
 export function parseOpenAI(markdown) {
   const lines = markdown.split(/\r?\n/),
     models = {};
   let section = "",
-    tier = "standard";
+    tier = "standard",
+    heading = "";
   const found = new Set();
   assert(
     markdown.includes(
@@ -87,61 +125,55 @@ export function parseOpenAI(markdown) {
         "Cyber models",
         "Multimodal models",
         "Specialized models",
+        "Tools",
+        "Cloud platforms",
         "Finetuning",
+        "Fine-tuning",
       ].includes(line)
     ) {
       section = line;
       tier = "standard";
     }
-    if (["Standard", "Batch", "Flex", "Fast", "Ultrafast"].includes(line))
+    if (["Standard", "Batch", "Flex", "Fast", "Ultrafast"].includes(line)) {
       tier = line.toLowerCase();
+      heading = "";
+    }
+    if (line.startsWith("### ")) heading = line;
     if (
       !["Flagship models", "Cyber models", "Specialized models"].includes(
         section,
       ) ||
-      !line.startsWith("|")
+      !/^\|\s*(Model|Category)\s*\|/.test(line)
     )
       continue;
-    if (!/^\|\s*(Model|Category)\s*\|/.test(line)) continue;
     const { headers, rows } = table(lines, i);
-    const grouped = section !== "Specialized models";
-    assert(
-      isDeepStrictEqual(
-        headers,
-        grouped
-          ? [
-              "Model",
-              "Short context input",
-              "Short context cached input",
-              "Short context cache writes",
-              "Short context output",
-              "Long context input",
-              "Long context cached input",
-              "Long context cache writes",
-              "Long context output",
-            ]
-          : ["Category", "Model", "Input", "Cached input", "Output"],
-      ),
-      `Unexpected OpenAI ${section} headers`,
-    );
+    i += rows.length + 1;
+    // A dated list price that replaces a current promotion is not yet in force.
+    if (/list pricing data/i.test(heading)) continue;
+    const { map, model, category } = openAIColumns(headers);
     found.add(section + "/" + tier);
+    const parsed = {};
     for (const row of rows) {
-      if (!grouped && ["Embedding", "Moderation"].includes(row[0])) continue;
-      const id = row[grouped ? 0 : 1].replace(/ \(<272K context length\)$/, "");
-      const short = {},
-        long = {};
-      const order = grouped
-        ? ["input", "cache_read", "cache_write_5m", "output"]
-        : ["input", "cache_read", "output"];
-      const offset = grouped ? 1 : 2;
-      for (let k = 0; k < order.length; k++) {
-        const s = rate(row[offset + k]);
-        if (s !== undefined) short[order[k]] = s;
-        if (grouped) {
-          const l = rate(row[offset + 4 + k]);
-          if (l !== undefined) long[order[k]] = l;
-        }
+      if (category >= 0 && ["Embedding", "Moderation"].includes(row[category]))
+        continue;
+      const split = /^(.*?) \((short|long) context\)$/.exec(row[model]);
+      const id = (split ? split[1] : row[model]).replace(
+        / \(<272K context length\)$/,
+        "",
+      );
+      const entry = (parsed[id] ??= { short: {}, long: {} });
+      for (const [column, context, metric] of map) {
+        const value = rate(row[column]);
+        if (value === undefined) continue;
+        const target = split ? split[2] : context;
+        assert(
+          !split || context === "short",
+          `Mixed OpenAI context layout for ${id}`,
+        );
+        entry[target][metric] = value;
       }
+    }
+    for (const [id, { short, long }] of Object.entries(parsed)) {
       assert(short.input && short.output, `Missing input/output for ${id}`);
       const hasLong = Object.keys(long).length > 0;
       if (hasLong)
@@ -152,7 +184,6 @@ export function parseOpenAI(markdown) {
       put(models, id, "openai", tier, short, hasLong ? long : undefined);
       if (hasLong) models[id].context_threshold = 272000;
     }
-    i += rows.length + 1;
   }
   for (const tier of ["standard", "batch", "flex", "fast"])
     assert(
@@ -219,14 +250,35 @@ export function parseAnthropic(markdown) {
       ),
       `Unexpected Claude ${section} headers`,
     );
+    // Prompt-length pricing (Claude Haiku 5.5) lists one row per tier:
+    // "(for prompts up to N tokens)" is short, "(for prompts over N tokens)" long.
+    const parsed = {};
     for (const row of rows) {
+      const tiered =
+        /^(.*?) \(for prompts (up to|over) ([0-9,]+) tokens\)$/.exec(row[0]);
+      const cell = tiered ? tiered[1] : row[0];
       // Only fast-mode tables combine several models in one cell.
       const names =
-        base || section === "Batch processing" ? [row[0]] : row[0].split(" / ");
+        base || section === "Batch processing" ? [cell] : cell.split(" / ");
       for (const name of names) {
         const id = claudeId(name);
+        const entry = (parsed[id] ??= {
+          name,
+          short: undefined,
+          long: undefined,
+        });
+        const context = tiered?.[2] === "over" ? "long" : "short";
+        if (tiered) {
+          const threshold = Number(tiered[3].replaceAll(",", ""));
+          assert(
+            entry.threshold === undefined || entry.threshold === threshold,
+            `Inconsistent Claude prompt threshold for ${id}`,
+          );
+          entry.threshold = threshold;
+        }
+        assert(!entry[context], `Duplicate Claude ${section} row for ${id}`);
         if (base) {
-          const short = {};
+          const rates = {};
           for (const [k, metric] of [
             "input",
             "cache_write_5m",
@@ -234,37 +286,55 @@ export function parseAnthropic(markdown) {
             "cache_read",
             "output",
           ].entries()) {
-            short[metric] = rate(row[k + 1]);
+            rates[metric] = rate(row[k + 1]);
             assert(
-              short[metric] !== undefined,
+              rates[metric] !== undefined,
               `Missing Claude rate: ${id}/${metric}`,
             );
           }
-          put(models, id, "anthropic", "standard", short);
-          const version = Number(/^Claude \w+ (\d+(?:\.\d+)?)/.exec(name)[1]);
-          models[id].regional = version >= 4.6;
+          entry[context] = rates;
         } else {
-          const standard = models[id]?.tiers.standard.short;
+          const standard = models[id]?.tiers.standard?.[context];
           assert(standard, `No standard Claude prices for ${id}`);
           const input = rate(row[1]),
             output = rate(row[2]);
           assert(input && output, `Missing ${section} rates for ${id}`);
           const scale = input / standard.input;
-          const short = { input, output };
+          const rates = { input, output };
           for (const metric of [
             "cache_read",
             "cache_write_5m",
             "cache_write_1h",
           ])
-            short[metric] = Number((standard[metric] * scale).toFixed(8));
-          put(
-            models,
-            id,
-            "anthropic",
-            section === "Batch processing" ? "batch" : "fast",
-            short,
-          );
+            rates[metric] = Number((standard[metric] * scale).toFixed(8));
+          entry[context] = rates;
         }
+      }
+    }
+    for (const [id, { name, short, long, threshold }] of Object.entries(
+      parsed,
+    )) {
+      assert(short, `Missing Claude ${section} short-prompt rates for ${id}`);
+      assert(
+        !long || threshold !== undefined,
+        `Claude long-prompt rates without threshold for ${id}`,
+      );
+      const tier = base
+        ? "standard"
+        : section === "Batch processing"
+          ? "batch"
+          : "fast";
+      put(models, id, "anthropic", tier, short, long);
+      if (threshold !== undefined) {
+        assert(
+          (models[id].context_threshold ?? threshold) === threshold,
+          `Inconsistent Claude prompt threshold for ${id}`,
+        );
+        models[id].context_threshold = threshold;
+      }
+      if (base) {
+        const version = Number(/^Claude \w+ (\d+(?:\.\d+)?)/.exec(name)[1]);
+        models[id].regional = version >= 4.6;
       }
     }
     if (section === "Batch processing") batches = true;

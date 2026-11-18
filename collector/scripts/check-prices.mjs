@@ -2,6 +2,14 @@
 // Read-only audit. Feed omissions/nulls never erase verified provider rates.
 import { readFile } from "node:fs/promises";
 import { catalog, modelPrice } from "../src/pricing.ts";
+// Reviewed disagreements where the provider's own pricing page is authoritative.
+// Each matches one exact catalog/feed pair, so any further change is reported.
+const { feed_exceptions: exceptions = [] } = JSON.parse(
+  await readFile(
+    new URL("../pricing/sync-rules.json", import.meta.url),
+    "utf8",
+  ),
+);
 const url = "https://www.llm-prices.com/current-v1.json";
 const feed = process.argv[2]
   ? JSON.parse(await readFile(process.argv[2], "utf8"))
@@ -64,7 +72,14 @@ for (const row of feed.prices) {
     )
       throw new Error(`Invalid rate for ${key}`);
     compared++;
-    if (row[field] !== rates[metric])
+    const reviewed = exceptions.some(
+      (e) =>
+        e.feed_id === key &&
+        e.metric === metric &&
+        e.feed === row[field] &&
+        e.catalog === rates[metric],
+    );
+    if (row[field] !== rates[metric] && !reviewed)
       mismatches.push({
         model: key,
         metric,

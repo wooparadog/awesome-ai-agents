@@ -3,7 +3,10 @@
   "models": {
     "gpt-6-sol": { "regional": true },
     "gpt-6-luna": { "regional": true },
-    "gpt-6.1-sol": { "regional": true }
+    "gpt-6.1-sol": { "regional": true },
+    "gpt-6.1-terra": { "regional": true },
+    "gpt-6.2-sol": { "regional": true },
+    "gpt-6.2-astra": { "regional": true }
   },
   "aliases": {
     "claude-sonnet-5.5": "claude-sonnet-5-5",
@@ -11,6 +14,17 @@
     "claude-sonnet-4.6": "claude-sonnet-4-6",
     "claude-haiku-5.5": "claude-haiku-5-5"
   },
+  "feed_exceptions": [
+    {
+      "feed_id": "anthropic/claude-sonnet-5.5",
+      "metric": "cache_read",
+      "feed": 0.2,
+      "catalog": 0.1,
+      "reason": "Claude pricing lists Sonnet 5.5 cache hits at $0.10/MTok, 0.05x the $2 base input price, in both the model and prompt caching tables.",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "reviewed_at": "2026-11-18"
+    }
+  ],
   "rate_overrides": [
     {
       "model": "gpt-5.4",

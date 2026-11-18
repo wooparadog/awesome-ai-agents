@@ -1,6 +1,6 @@
 {
-  "version": "2026-11-12",
-  "verified_at": "2026-11-12T00:00:00Z",
+  "version": "2026-11-18",
+  "verified_at": "2026-11-18T00:00:00Z",
   "units": "USD per million tokens",
   "aliases": {
     "gpt-5.6": "gpt-5.6-sol",
@@ -37,7 +37,7 @@
     },
     "chat-latest": {
       "provider": "openai",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://developers.openai.com/api/docs/pricing",
       "tiers": {
         "standard": {
           "short": {
@@ -48,7 +48,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "chatgpt-4o-latest": {
       "provider": "openai",
@@ -200,7 +200,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-fable-5-1": {
       "provider": "anthropic",
@@ -226,22 +226,42 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-fable-5-2": {
       "provider": "anthropic",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "tiers": {
         "standard": {
           "short": {
             "input": 8,
             "cache_read": 0.2,
-            "output": 40
+            "output": 40,
+            "cache_write_5m": 10,
+            "cache_write_1h": 16
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 16,
+            "output": 80,
+            "cache_read": 0.4,
+            "cache_write_5m": 20,
+            "cache_write_1h": 32
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 4,
+            "output": 20,
+            "cache_read": 0.1,
+            "cache_write_5m": 5,
+            "cache_write_1h": 8
           }
         }
       },
-      "regional": false,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "regional": true,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-haiku-4-5": {
       "provider": "anthropic",
@@ -267,28 +287,48 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-haiku-5-5": {
       "provider": "anthropic",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "tiers": {
         "standard": {
           "short": {
             "input": 0.1,
             "cache_read": 0.01,
-            "output": 0.5
+            "output": 0.5,
+            "cache_write_5m": 0.125,
+            "cache_write_1h": 0.2
           },
           "long": {
             "input": 0.5,
             "cache_read": 0.05,
-            "output": 2.5
+            "output": 2.5,
+            "cache_write_5m": 0.625,
+            "cache_write_1h": 1
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 0.05,
+            "output": 0.25,
+            "cache_read": 0.005,
+            "cache_write_5m": 0.0625,
+            "cache_write_1h": 0.1
+          },
+          "long": {
+            "input": 0.25,
+            "output": 1.25,
+            "cache_read": 0.025,
+            "cache_write_5m": 0.3125,
+            "cache_write_1h": 0.5
           }
         }
       },
-      "regional": false,
+      "regional": true,
       "context_threshold": 100000,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-mythos-5": {
       "provider": "anthropic",
@@ -314,7 +354,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-mythos-5-1": {
       "provider": "anthropic",
@@ -340,22 +380,42 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-mythos-5-2": {
       "provider": "anthropic",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "tiers": {
         "standard": {
           "short": {
             "input": 8,
             "cache_read": 0.2,
-            "output": 40
+            "output": 40,
+            "cache_write_5m": 10,
+            "cache_write_1h": 16
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 16,
+            "output": 80,
+            "cache_read": 0.4,
+            "cache_write_5m": 20,
+            "cache_write_1h": 32
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 4,
+            "output": 20,
+            "cache_read": 0.1,
+            "cache_write_5m": 5,
+            "cache_write_1h": 8
           }
         }
       },
-      "regional": false,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "regional": true,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4": {
       "provider": "anthropic",
@@ -381,7 +441,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4-1": {
       "provider": "anthropic",
@@ -407,7 +467,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4-5": {
       "provider": "anthropic",
@@ -433,7 +493,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4-6": {
       "provider": "anthropic",
@@ -459,7 +519,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4-7": {
       "provider": "anthropic",
@@ -485,7 +545,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-4-8": {
       "provider": "anthropic",
@@ -520,7 +580,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-5": {
       "provider": "anthropic",
@@ -555,7 +615,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-opus-5-5": {
       "provider": "anthropic",
@@ -590,7 +650,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-sonnet-4": {
       "provider": "anthropic",
@@ -698,7 +758,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-sonnet-5": {
       "provider": "anthropic",
@@ -724,7 +784,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "claude-sonnet-5-5": {
       "provider": "anthropic",
@@ -735,7 +795,7 @@
             "input": 2,
             "cache_write_5m": 2.5,
             "cache_write_1h": 4,
-            "cache_read": 0.2,
+            "cache_read": 0.1,
             "output": 10
           }
         },
@@ -743,14 +803,14 @@
           "short": {
             "input": 1,
             "output": 5,
-            "cache_read": 0.1,
+            "cache_read": 0.05,
             "cache_write_5m": 1.25,
             "cache_write_1h": 2
           }
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "davinci-002": {
       "provider": "openai",
@@ -906,7 +966,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-4.1-mini": {
       "provider": "openai",
@@ -934,7 +994,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-4.1-nano": {
       "provider": "openai",
@@ -1005,7 +1065,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-4o-2024-05-13": {
       "provider": "openai",
@@ -1059,7 +1119,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5": {
       "provider": "openai",
@@ -1095,7 +1155,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5-codex": {
       "provider": "openai",
@@ -1146,7 +1206,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5-nano": {
       "provider": "openai",
@@ -1175,7 +1235,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5-pro": {
       "provider": "openai",
@@ -1195,11 +1255,11 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5-search-api": {
       "provider": "openai",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://developers.openai.com/api/docs/pricing",
       "tiers": {
         "standard": {
           "short": {
@@ -1210,7 +1270,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.1": {
       "provider": "openai",
@@ -1246,7 +1306,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.1-codex": {
       "provider": "openai",
@@ -1327,7 +1387,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.2-codex": {
       "provider": "openai",
@@ -1362,7 +1422,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.3-codex": {
       "provider": "openai",
@@ -1384,7 +1444,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.4": {
       "provider": "openai",
@@ -1436,7 +1496,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.4-mini": {
       "provider": "openai",
@@ -1472,7 +1532,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.4-nano": {
       "provider": "openai",
@@ -1501,7 +1561,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.4-pro": {
       "provider": "openai",
@@ -1540,7 +1600,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.5": {
       "provider": "openai",
@@ -1592,7 +1652,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.5-cyber": {
       "provider": "openai",
@@ -1608,6 +1668,21 @@
       },
       "regional": true,
       "verified_at": "2026-11-10T00:00:00.000Z"
+    },
+    "gpt-5.5-cyber-preview": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 12.5,
+            "output": 75,
+            "cache_read": 1.25
+          }
+        }
+      },
+      "regional": false,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.5-pro": {
       "provider": "openai",
@@ -1638,7 +1713,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.6-cyber": {
       "provider": "openai",
@@ -1654,7 +1729,7 @@
         }
       },
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.6-luna": {
       "provider": "openai",
@@ -1719,7 +1794,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.6-sol": {
       "provider": "openai",
@@ -1784,7 +1859,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-5.6-terra": {
       "provider": "openai",
@@ -1849,7 +1924,7 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-6-astra": {
       "provider": "openai",
@@ -1928,7 +2003,50 @@
       },
       "context_threshold": 272000,
       "regional": true,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6-astra-law": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 10,
+            "output": 50,
+            "cache_read": 1
+          },
+          "long": {
+            "input": 20,
+            "output": 75,
+            "cache_read": 2
+          }
+        }
+      },
+      "regional": false,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6-cyber": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 20,
+            "output": 100,
+            "cache_read": 2,
+            "cache_write_5m": 25
+          },
+          "long": {
+            "input": 40,
+            "output": 150,
+            "cache_read": 4
+          }
+        }
+      },
+      "regional": false,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-6-luna": {
       "provider": "openai",
@@ -1993,7 +2111,30 @@
       },
       "regional": true,
       "context_threshold": 272000,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6-rosalind": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 10,
+            "output": 50,
+            "cache_read": 1,
+            "cache_write_5m": 12.5
+          },
+          "long": {
+            "input": 20,
+            "output": 75,
+            "cache_read": 2,
+            "cache_write_5m": 25
+          }
+        }
+      },
+      "regional": false,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-6-sol": {
       "provider": "openai",
@@ -2058,7 +2199,7 @@
       },
       "regional": true,
       "context_threshold": 272000,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-6.1-sol": {
       "provider": "openai",
@@ -2119,32 +2260,258 @@
             "cache_write_5m": 10,
             "output": 30
           }
+        },
+        "ultrafast": {
+          "short": {
+            "input": 12,
+            "output": 60,
+            "cache_read": 0.6,
+            "cache_write_5m": 15
+          },
+          "long": {
+            "input": 24,
+            "output": 90,
+            "cache_read": 1.2,
+            "cache_write_5m": 30
+          }
         }
       },
       "regional": true,
       "context_threshold": 272000,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-6.1-terra": {
       "provider": "openai",
-      "source": "https://www.llm-prices.com/current-v1.json",
+      "source": "https://developers.openai.com/api/docs/pricing",
       "tiers": {
         "standard": {
           "short": {
             "input": 1,
             "cache_read": 0.05,
-            "output": 5
+            "output": 5,
+            "cache_write_5m": 1.25
           },
           "long": {
             "input": 2,
             "cache_read": 0.1,
-            "output": 7.5
+            "output": 7.5,
+            "cache_write_5m": 2.5
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 0.5,
+            "output": 2.5,
+            "cache_read": 0.025,
+            "cache_write_5m": 0.625
+          },
+          "long": {
+            "input": 1,
+            "output": 3.75,
+            "cache_read": 0.05,
+            "cache_write_5m": 1.25
+          }
+        },
+        "flex": {
+          "short": {
+            "input": 0.5,
+            "output": 2.5,
+            "cache_read": 0.025,
+            "cache_write_5m": 0.625
+          },
+          "long": {
+            "input": 1,
+            "output": 3.75,
+            "cache_read": 0.05,
+            "cache_write_5m": 1.25
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 2,
+            "output": 10,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5
+          },
+          "long": {
+            "input": 4,
+            "output": 15,
+            "cache_read": 0.2,
+            "cache_write_5m": 5
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6.2-astra": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 8,
+            "output": 40,
+            "cache_read": 0.4,
+            "cache_write_5m": 10
+          },
+          "long": {
+            "input": 16,
+            "output": 60,
+            "cache_read": 0.8,
+            "cache_write_5m": 20
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 4,
+            "output": 20,
+            "cache_read": 0.2,
+            "cache_write_5m": 5
+          },
+          "long": {
+            "input": 8,
+            "output": 30,
+            "cache_read": 0.4,
+            "cache_write_5m": 10
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 16,
+            "output": 80,
+            "cache_read": 0.8,
+            "cache_write_5m": 20
+          },
+          "long": {
+            "input": 32,
+            "output": 120,
+            "cache_read": 1.6,
+            "cache_write_5m": 40
+          }
+        },
+        "ultrafast": {
+          "short": {
+            "input": 24,
+            "output": 120,
+            "cache_read": 1.2,
+            "cache_write_5m": 30
+          },
+          "long": {
+            "input": 48,
+            "output": 180,
+            "cache_read": 2.4,
+            "cache_write_5m": 60
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6.2-astra-law": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 8,
+            "output": 40,
+            "cache_read": 0.4,
+            "cache_write_5m": 10
+          },
+          "long": {
+            "input": 16,
+            "output": 60,
+            "cache_read": 0.8,
+            "cache_write_5m": 20
           }
         }
       },
       "regional": false,
       "context_threshold": 272000,
-      "verified_at": "2026-11-10T00:00:00.000Z"
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-6.2-sol": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 2,
+            "output": 10,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5
+          },
+          "long": {
+            "input": 4,
+            "output": 15,
+            "cache_read": 0.2,
+            "cache_write_5m": 5
+          }
+        },
+        "batch": {
+          "short": {
+            "input": 1,
+            "output": 5,
+            "cache_read": 0.05,
+            "cache_write_5m": 1.25
+          },
+          "long": {
+            "input": 2,
+            "output": 7.5,
+            "cache_read": 0.1,
+            "cache_write_5m": 2.5
+          }
+        },
+        "fast": {
+          "short": {
+            "input": 4,
+            "output": 20,
+            "cache_read": 0.2,
+            "cache_write_5m": 5
+          },
+          "long": {
+            "input": 8,
+            "output": 30,
+            "cache_read": 0.4,
+            "cache_write_5m": 10
+          }
+        },
+        "ultrafast": {
+          "short": {
+            "input": 6,
+            "output": 30,
+            "cache_read": 0.3,
+            "cache_write_5m": 7.5
+          },
+          "long": {
+            "input": 12,
+            "output": 45,
+            "cache_read": 0.6,
+            "cache_write_5m": 15
+          }
+        }
+      },
+      "regional": true,
+      "context_threshold": 272000,
+      "verified_at": "2026-11-18T00:00:00Z"
+    },
+    "gpt-rosalind-discovery": {
+      "provider": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "tiers": {
+        "standard": {
+          "short": {
+            "input": 5,
+            "output": 25,
+            "cache_read": 0.5
+          }
+        }
+      },
+      "regional": false,
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "gpt-rosalind-research": {
       "provider": "openai",
@@ -2159,7 +2526,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "o1": {
       "provider": "openai",
@@ -2265,7 +2632,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "o3-deep-research": {
       "provider": "openai",
@@ -2321,7 +2688,7 @@
         }
       },
       "regional": false,
-      "verified_at": "2026-10-07T00:00:00Z"
+      "verified_at": "2026-11-18T00:00:00Z"
     },
     "o4-mini": {
       "provider": "openai",

@@ -397,9 +397,17 @@ it("supports published Astra ultrafast rates only in its documented regions", ()
       { ...direct, service_tier: "ultrafast", inference_geo: "eu" },
     ).priced,
   ).toBe(false);
+  // GPT-6.1 Sol Ultrafast was published in the November 18 snapshot.
   expect(
     total(
       "gpt-6.1-sol",
+      { input: 1000 },
+      { ...direct, service_tier: "ultrafast" },
+    ).dollars,
+  ).toBeCloseTo(0.012, 12);
+  expect(
+    total(
+      "gpt-6-sol",
       { input: 1000 },
       { ...direct, service_tier: "ultrafast" },
     ).priced,
@@ -423,7 +431,7 @@ it("does not refresh the verification date of unlisted legacy models", () => {
       "delta",
       { input: 1 },
       direct,
-      Date.parse("2026-10-20T00:00:00Z"),
+      Date.parse("2026-11-20T00:00:00Z"),
     )._estimated,
   ).toBe(0);
   expect(

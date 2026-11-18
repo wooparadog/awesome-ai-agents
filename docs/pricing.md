@@ -5,18 +5,27 @@ or provider invoices. Tool calls, hosted containers, storage, taxes, credits,
 private discounts, and subscription allowances are not included.
 
 `collector/pricing/catalog.json` is the pricing snapshot, refreshed on
-November 12, 2026. It includes GPT-6 Sol/Luna, GPT-6.1 Sol/Terra, Claude
-Opus/Sonnet/Haiku 5.5, Claude Fable/Mythos 5.2, and the existing text-model
-catalog. The repeatable updater uses the
-[LLM Prices JSON feed](https://www.llm-prices.com/current-v1.json) by default
-(the snapshot used for this refresh is dated November 10). Models added from
-the feed alone (GPT-6.1 Terra, Claude Haiku 5.5, Claude Fable/Mythos 5.2) have
-standard input, cached-input, and output rates only; their cache-write,
-service-tier, and regional prices still need a provider review. Input, output,
-and cached-input prices are cross-checked against the feed; cache writes,
-service tiers, and geographic rules come from the
-[OpenAI pricing tables](https://developers.openai.com/api/docs/pricing) and
-[Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+November 18, 2026 from both provider pages. It includes GPT-6.2 Astra/Sol,
+GPT-6.1 Sol/Terra, GPT-6 Astra/Sol/Luna, the GPT-6 cyber, Rosalind, and law
+configurations, Claude Opus/Sonnet/Haiku 5.5, Claude Fable/Mythos 5.2, and the
+existing text-model catalog. The repeatable updater uses the
+[LLM Prices JSON feed](https://www.llm-prices.com/current-v1.json) by default;
+`--official` parses the [OpenAI pricing tables](https://developers.openai.com/api/docs/pricing)
+and [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing),
+which also supply cache writes, service tiers, prompt-length tiers, and
+regional rules absent from the feed. The provider pages are authoritative:
+reviewed feed errors are recorded as `feed_exceptions` in
+`collector/pricing/sync-rules.json`, so neither the feed-only updater nor the
+`prices:check` audit reintroduces them. The November 18 review corrected
+Claude Sonnet 5.5 cache hits to $0.10/MTok (the feed lists $0.20).
+
+OpenAI tables list 30-minute and 12-hour cache writes. The 30-minute write is
+the default retention and is billed as `cache_write_5m`. Codex transcripts do
+not distinguish 12-hour writes, so that column is not mapped. GPT-6.2 Ultrafast
+uses its current promotional rate (three times Standard, through February 28,
+2027); a refresh after that date picks up the list rate. Claude Haiku 5.5 uses
+higher rates for prompts over 100,000 tokens, counting cache reads and writes.
+Background-request discounts are not modeled; such usage stays unpriced.
 Each model records its source and verification date. Source URLs and SHA-256
 receipts live in `collector/pricing/sources.json`.
 The old `price_rates` SQL table is retained only for compatibility with older
@@ -28,10 +37,11 @@ the catalog through `collector/src/pricing.ts`.
 - Delta input excludes cache reads and writes. The prompt length used for tier
   selection includes uncached input, cached input, and both cache-write durations.
   Output tokens do not contribute to that threshold.
-- GPT-6 Astra and the applicable GPT-5 models use long-context rates **above**
+- GPT-6.x and the applicable GPT-5 models use long-context rates **above**
   272,000 input tokens, for the whole request. Exactly 272,000 uses the short rate.
-  Claude Sonnet 4/4.5 uses its 200,000-token tier; Claude 4.6 and later uses standard
-  rates across its supported context window.
+  Claude Sonnet 4/4.5 uses its 200,000-token tier and Claude Haiku 5.5 its
+  100,000-token tier; other Claude 4.6 and later models use standard rates
+  across their supported context window.
 - Standard, Fast, Ultrafast, Batch, and Flex prices are explicit per-model tables. Missing
   combinations remain unpriced. In particular, Fast is not one universal
   multiplier, and Claude Priority capacity is not treated as OpenAI Fast mode.
